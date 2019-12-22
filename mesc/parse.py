@@ -216,7 +216,7 @@ def G_and_ave_h2_cis(fh, g_indices, num=None):
     '''Parses .G and .ave_h2_cis files, split across num chromosomes'''
     parsefunc = lambda y: [float(z) for z in open(y, 'r').readline().split()]
     suffix_G = '.G'
-    suffix_h2cis = '.ave_h2_cis'
+    suffix_h2cis = '.ave_h2cis'
     if num is not None:
         all_G = [parsefunc(sub_chr(fh, i) + suffix_G) for i in range(1, num + 1)]
         G_annot = np.sum(all_G, axis=0)
