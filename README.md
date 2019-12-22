@@ -10,4 +10,4 @@ git clone https://github.com/douglasyao/mesc.git
 cd mesc
 ```
 
-See the [wiki](https://github.com/douglasyao/mesc/wiki) page for documentation. 
+See the [wiki](https://github.com/douglasyao/mesc/wiki) page for documentation. For comments and feedback, please contact douglasyao@g.harvard.edu.
