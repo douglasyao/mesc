@@ -57,15 +57,6 @@ def get_compression(fh):
     return compression
 
 
-def read_cts(fh, match_snps):
-    '''Reads files for --cts-bin.'''
-    compression = get_compression(fh)
-    cts = read_csv(fh, compression=compression, header=None, names=['SNP', 'ANNOT'])
-    if not series_eq(cts.SNP, match_snps):
-        raise ValueError('--cts-bin and the .bim file must have identical SNP columns.')
-
-    return cts.ANNOT.values
-
 
 def sumstats(fh, alleles=False, dropna=True):
     '''Parses .sumstats files. See docs/file_formats_sumstats.txt.'''
@@ -108,6 +99,7 @@ def ldscore_fromlist(flist, suffix, args, num=None):
     return pd.concat(ldscore_array, axis=1), indices_array, group_array
 
 def filter_columns(fh, compression, fsuffix, args):
+    '''Filter column names when reading LD scores or expression scores'''
     header = read_csv(fh, compression=compression, nrows=0)
     cnames = header.columns.tolist()
     cnames = [x for x in cnames if x not in ['MAF', 'CM']][3:]
@@ -121,18 +113,18 @@ def filter_columns(fh, compression, fsuffix, args):
             indices = range(0, len(cnames))
         cgroups = [None]
 
-    elif fsuffix == 'gldscore':
-        if args.g_ld_keep_annot:
+    elif fsuffix == 'expscore':
+        if args.exp_keep_annot:
             tokeep = ['Cis_herit_bin'] + ['{}_Cis_herit_bin'.format(x) for x in args.g_ld_keep_annot.split(',')]
-            cgroups = [re.sub('(Cis_herit_bin)(_?[0-9]+L2$)', '\\1', x) for x in cnames]
+            cgroups = [re.sub('(Cis_herit_bin)(_?[0-9]+(L2)?$)', '\\1', x) for x in cnames]
             indices = [i for i, x in enumerate(cgroups) if x in tokeep]
-        elif args.g_ld_remove_annot:
+        elif args.exp_remove_annot:
             toremove = ['{}_Cis_herit_bin'.format(x) for x in args.g_ld_keep_annot.split(',')]
-            cgroups = [re.sub('(Cis_herit_bin)(_?[0-9]+L2$)', '\\1', x) for x in cnames]
+            cgroups = [re.sub('(Cis_herit_bin)(_?[0-9]+(L2)?$)', '\\1', x) for x in cnames]
             indices = [i for i, x in enumerate(cgroups) if x not in toremove]
         else:
             indices = range(0, len(cnames))
-            cgroups = [re.sub('(Cis_herit_bin)(_?[0-9]+L2$)', '\\1', x) for x in cnames]
+            cgroups = [re.sub('(Cis_herit_bin)(_?[0-9]+(L2)?$)', '\\1', x) for x in cnames]
         cgroups = [cgroups[i] for i in indices]
 
     else:
@@ -170,9 +162,9 @@ def annot_parser(fh, compression, cnames, frqfile_full=None, compression_frq=Non
     return df_annot
 
 def g_annot_parser(fh, compression, cnames):
+    '''Parse expression score files'''
     df_annot = read_csv(fh, header=0, compression=compression, usecols=cnames).astype(float)
     return df_annot
-
 
 def frq_parser(fh, compression):
     '''Parse frequency files.'''
@@ -181,17 +173,18 @@ def frq_parser(fh, compression):
         df.rename(columns={'MAF': 'FRQ'}, inplace=True)
     return df[['SNP', 'FRQ']]
 
-
 def ldscore(fh, fsuffix, args, num=None):
     '''Parse .l2.ldscore files, split across num chromosomes. See docs/file_formats_ld.txt.'''
     if fsuffix == 'weight':
         suffix = '.l2.ldscore'
+    elif fsuffix == 'expscore':
+        suffix = '.expscore'
     else:
         suffix = '.l2.' + fsuffix
     if num is not None:  # num files, e.g., one per chromosome
         first_fh = sub_chr(fh, 1) + suffix
         s, compression = which_compression(first_fh)
-        chr_ld = [l2_parser(sub_chr(fh, i) + suffix + s, compression, fsuffix, args) for i in xrange(1, num + 1)]
+        chr_ld = [l2_parser(sub_chr(fh, i) + suffix + s, compression, fsuffix, args) for i in range(1, num + 1)]
         indices = chr_ld[0][1]
         cgroup = chr_ld[0][2]
         chr_ld = [x[0] for x in chr_ld]
@@ -213,20 +206,21 @@ def M(fh, indices, num=None, N=2, common=False):
         suffix += '_5_50'
 
     if num is not None:
-        x = np.sum([parsefunc(sub_chr(fh, i) + suffix) for i in xrange(1, num + 1)], axis=0)
+        x = np.sum([parsefunc(sub_chr(fh, i) + suffix) for i in range(1, num + 1)], axis=0)
     else:
         x = parsefunc(fh + suffix)
     x = [x[i] for i in indices]
     return np.array(x).reshape((1, len(x)))
 
 def G_and_ave_h2_cis(fh, g_indices, num=None):
+    '''Parses .G and .ave_h2_cis files, split across num chromosomes'''
     parsefunc = lambda y: [float(z) for z in open(y, 'r').readline().split()]
     suffix_G = '.G'
     suffix_h2cis = '.ave_h2_cis'
     if num is not None:
-        all_G = [parsefunc(sub_chr(fh, i) + suffix_G) for i in xrange(1, num + 1)]
+        all_G = [parsefunc(sub_chr(fh, i) + suffix_G) for i in range(1, num + 1)]
         G_annot = np.sum(all_G, axis=0)
-        all_h2cis = [parsefunc(sub_chr(fh, i) + suffix_h2cis) for i in xrange(1, num + 1)]
+        all_h2cis = [parsefunc(sub_chr(fh, i) + suffix_h2cis) for i in range(1, num + 1)]
         h2_cis_annot = (np.sum(np.multiply(all_G, all_h2cis), axis=0) / G_annot)
     else:
         G_annot = parsefunc(fh + suffix_G)
@@ -242,6 +236,7 @@ def M_fromlist(flist, indices, num=None, N=2, common=False):
     return np.hstack([M(flist[i], indices[i], num, N, common) for i in range(0, len(flist))])
 
 def G_and_ave_h2_cis_fromlist(flist, indices, num=None):
+    '''Read a list of .G* and .ave_h2_cis* files and concatenate sideways.'''
     res = [G_and_ave_h2_cis(flist[i], indices[i], num) for i in range(0, len(flist))]
     G = [x[0] for x in res]
     ave_h2_cis = [x[1] for x in res]
@@ -311,13 +306,9 @@ def annot(fh_list, cnames, num=None, frqfile=None):
 
     return x, M_tot
 
-
 def g_annot(fh_list, cnames, num=None):
     '''
-    Parses .annot files and returns an overlap matrix. See docs/file_formats_ld.txt.
-    If num is not None, parses .annot files split across [num] chromosomes (e.g., the
-    output of parallelizing ldsc.py --l2 across chromosomes).
-
+    Parses .gannot files and returns an overlap matrix.
     '''
     annot_suffix = ['.gannot' for fh in fh_list]
     annot_compression = []
@@ -357,7 +348,6 @@ def g_annot(fh_list, cnames, num=None):
         M_tot = len(df_annot_list[0])
 
     return x, M_tot
-
 
 def __ID_List_Factory__(colnames, keepcol, fname_end, header=None, usecols=None):
 
