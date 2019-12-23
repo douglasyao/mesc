@@ -1,9 +1,9 @@
 '''
 (c) 2014 Brendan Bulik-Sullivan and Hilary Finucane
+Modified by Douglas Yao
 
-This module deals with getting all the data needed for LD Score regression from files
-into memory and checking that the input makes sense. There is no math here. LD Score
-regression is implemented in the regressions module.
+This module deals with getting all the data needed for MESC from files
+into memory and checking that the input makes sense. There is no math here. MESC is implemented in the regressions module.
 
 '''
 from __future__ import division

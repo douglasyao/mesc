@@ -1,12 +1,8 @@
 '''
-(c) 2014 Brendan Bulik-Sullivan and Hilary Finucane
-
-Estimators of heritability and genetic correlation.
-
-Shape convention is (n_snp, n_annot) for all classes.
-Last column = intercept.
-
+Estimating heritability mediated by gene expression levels
+Douglas Yao
 '''
+
 from __future__ import division
 import numpy as np
 import pandas as pd

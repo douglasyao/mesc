@@ -1,5 +1,6 @@
 '''
 (c) 2014 Brendan Bulik-Sullivan and Hilary Finucane
+Modified by Douglas Yao
 
 This module contains functions for parsing various ldsc-defined file formats.
 
@@ -24,8 +25,10 @@ def read_csv(fh, **kwargs):
 def sub_chr(s, chr):
     '''Substitute chr for @, else append chr to the end of str.'''
     if '@' not in s:
-        s += '@'
-
+        if s[-1] == '.':
+            s += '@'
+        else:
+            s += '.@'
     return s.replace('@', str(chr))
 
 def which_compression(fh):
