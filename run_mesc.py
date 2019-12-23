@@ -112,10 +112,11 @@ parser.add_argument('--plink-path', default=None, type=str,
 parser.add_argument('--expression-matrix', default=None, type=str,
                     help='Gene by sample expression matrix')
 parser.add_argument('--bfile', default=None, type=str,
-                    help='Sample genotypes to go along with gene expression matrix. Prefix for PLINK .bed/.bim/.fam file')
-parser.add_argument('--bfile-chr', default=None, type=str,
-                    help='Same as --bfile, but will read genotypes split into 22 chromosomes in the same '
-                         'manner as --ref-ld-chr.')
+                    help='Sample genotypes to go along with gene expression matrix. Prefix for PLINK .bed/.bim/.fam file.'
+                         'Can only analyze one chromosome at a time, so must be split by chromosome.')
+parser.add_argument('--chr', default=None, type=int,
+                    help='Which chromosome input genotypes lie on. Can only analyze one chromosome at a time')
+
 # Optional flags
 parser.add_argument('--covariates', default=None, type=str,
                     help='Optional gene expression covariates (in PLINK format)')
@@ -123,7 +124,7 @@ parser.add_argument('--gcta-path', default=os.path.join(dirname, 'gcta_nr_robust
                     help='Path to GCTA')
 parser.add_argument('--tmp', default=os.path.join(dirname, 'tmp'), type=str,
                     help='Directory to store temporary files')
-parser.add_argument('--keep', default=os.path.join(dirname, 'data/hapmap3_snps.txt'), type=str,
+parser.add_argument('--keep', default=os.path.join(dirname, 'data/hm3_snps.txt'), type=str,
                     help='File with SNPs to include in expression score estimation. '
                     'The file should contain one SNP ID per row.')
 
@@ -207,16 +208,12 @@ if __name__ == '__main__':
                 raise ValueError('Must specify --plink-path with --compute-expscore-indiv')
             if args.expression_matrix is None:
                 raise ValueError('Must specify --expression-matrix with --compute-expscore-indiv')
-            if not (args.bfile or args.bfile_chr):
+            if not args.bfile:
                 raise ValueError('Must specify --bfile or --bfile-chr with --compute-expscore-indiv')
-            if args.bfile and args.bfile_chr:
-                raise ValueError('Cannot set both --bfile and --bfile-chr')
-
+            if not args.chr:
+                raise ValueError('Must specify --chr with --compute-expscore-indiv')
             subprocess.call(['mkdir', '-p', args.tmp])
-            if args.bfile:
-                ind.get_expression_scores(args)
-            else:
-                ind.get_expression_scores_chr(args)
+            ind.get_expression_scores(args)
 
         elif args.compute_expscore_sumstat:
             if not args.eqtl_sumstat:

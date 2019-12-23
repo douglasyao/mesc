@@ -18,7 +18,7 @@ def sub_chr(s, chr):
 
     return s.replace('@', str(chr))
 
-def check_order_and_get_len(cismat):
+def check_order_and_get_len(cismat, columns):
     print('Checking that genes and chromosomes are sorted')
     each_chrom = np.zeros(22, dtype=int)
     chr = set()
@@ -31,14 +31,14 @@ def check_order_and_get_len(cismat):
                     raise ValueError('Not enough columns')
                 continue
             elif i == 1:
-                prev_gene = l[0]
-                prev_chr = int(l[4])
+                prev_gene = l[columns[0]]
+                prev_chr = int(l[columns[4]])
                 genes.add(prev_gene)
                 chr.add(prev_chr)
                 each_chrom[prev_chr - 1] += 1
             else:
-                curr_gene = l[0]
-                curr_chr = int(l[4])
+                curr_gene = l[columns[0]]
+                curr_chr = int(l[columns[4]])
                 if curr_gene == prev_gene:
                     continue
                 elif curr_chr == prev_chr:
@@ -59,7 +59,8 @@ def check_order_and_get_len(cismat):
                     each_chrom[prev_chr - 1] += 1
     return each_chrom, i
 
-def get_snp_list(cismat, keep, keep_chr):
+def get_snp_list(cismat, keep, keep_chr, columns):
+    print('Getting SNP list')
     snp_list = []
     snp_only = set()
     with open(cismat) as f:
@@ -67,11 +68,11 @@ def get_snp_list(cismat, keep, keep_chr):
             if j == 0:
                 continue
             line = line.split()
-            snp = line[3]
-            chr = int(line[4])
+            snp = line[columns[3]]
+            chr = int(line[columns[4]])
             if chr != keep_chr:
                 continue
-            bp = int(line[5])
+            bp = int(line[columns[5]])
             if snp not in snp_only:
                 snp_list.append([chr, snp, bp])
                 snp_only.add(snp)
@@ -86,32 +87,39 @@ def read_ldscore(args, chr):
     ref_ld = pd.read_csv(geno_name + s, sep='\t', compression=comp)
     return ref_ld
 
-def estimate_expression_cis_herit(ref_ld, frq, zscores):
+def estimate_expression_cis_herit(ref_ld, frq, zscores, ref_ld_indices):
     n_snp = len(zscores)
     s = lambda x: np.array(x).reshape((n_snp, 1))
 
     start_snp = zscores['SNP'].values[0]
     end_snp = zscores['SNP'].values[-1]
 
-    start_snp_idx = int(np.where(ref_ld['SNP'] == start_snp)[0])
-    end_snp_idx = int(np.where(ref_ld['SNP'] == end_snp)[0])
+    start_snp_idx = ref_ld_indices[start_snp]
+    end_snp_idx = ref_ld_indices[end_snp]
 
-    temp_zscores = zscores[zscores['SNP'].isin(frq['SNP'])]
-    temp_start_snp = temp_zscores['SNP'].values[0]
-    temp_end_snp = temp_zscores['SNP'].values[-1]
-    temp_start_snp_idx = int(np.where(frq['SNP'] == temp_start_snp)[0])
-    temp_end_snp_idx = int(np.where(frq['SNP'] == temp_end_snp)[0])
+    i = 0
+    while start_snp not in frq:
+        i += 1
+        start_snp = zscores['SNP'].values[i]
+    temp_start_snp_idx = frq[start_snp]
+
+    i = -1
+    while end_snp not in frq:
+        i -= 1
+        end_snp = zscores['SNP'].values[i]
+    temp_end_snp_idx = frq[end_snp]
 
     M_annot = np.array(temp_end_snp_idx - temp_start_snp_idx).reshape((1, 1))
 
     if np.array_equal(ref_ld.iloc[start_snp_idx:end_snp_idx+1, 1].values, zscores['SNP'].values):
         temp_ref_ld = ref_ld.iloc[start_snp_idx:end_snp_idx+1, :]
         hsqhat = reg.Hsq(s(zscores['Z'].values ** 2), s(temp_ref_ld.iloc[:, 3]), s(temp_ref_ld.iloc[:, 3]),
-                         s(zscores['N']), M_annot)
+                         s(zscores['N']), M_annot, n_blocks=10)
     else:
-        all = pd.merge(ref_ld, zscores, on='SNP')
-        hsqhat = reg.Hsq(s(all['Z'].values ** 2), s(all['L2']), s(all['L2']),
-                         s(all['N']), M_annot)
+        indices = [ref_ld_indices[x] for x in zscores['SNP']]
+        temp_ref_ld = ref_ld.iloc[indices, :]
+        hsqhat = reg.Hsq(s(zscores['Z'].values ** 2), s(temp_ref_ld.iloc[:, 3]), s(temp_ref_ld.iloc[:, 3]),
+                         s(zscores['N']), M_annot, n_blocks=10)
 
     herit = hsqhat.tot
     herit_se = hsqhat.tot_se
@@ -119,13 +127,9 @@ def estimate_expression_cis_herit(ref_ld, frq, zscores):
 
     return herit, herit_se, herit_p
 
-def match(a, b):
-    return [b.index(x) if x in b else None for x in a]
-
 def get_expression_scores(args):
     cismat = args.eqtl_sumstat
     gene_num = 0
-    n_genes, n_lines = check_order_and_get_len(cismat)
     if args.columns:
         columns = args.columns.split(',')
         columns = [int(x)-1 for x in columns]
@@ -133,6 +137,8 @@ def get_expression_scores(args):
             raise ValueError('Must specify 8 column indices with --columns')
     else:
         columns = range(8)
+
+    n_genes, n_lines = check_order_and_get_len(cismat, columns)
 
     with open(cismat) as f:
         for i, line in enumerate(f):
@@ -142,23 +148,26 @@ def get_expression_scores(args):
                 continue
             elif i == 1:
                 temp_gene_mat = [line]
-                prev_gene = line[0]
-                prev_gene_symb = line[1]
-                prev_chr = int(line[4])
+                prev_gene = line[columns[0]]
+                prev_gene_symb = line[columns[1]]
+                prev_chr = int(line[columns[4]])
                 print('Analyzing chromosome {}'.format(prev_chr))
                 chrom_gene_num = 0
                 ref_ld = read_ldscore(args, prev_chr)
-                snps = get_snp_list(cismat, ref_ld['SNP'], prev_chr)
+                snps = get_snp_list(cismat, ref_ld['SNP'], prev_chr, columns)
+                snp_indices = dict(zip(snps['SNP'].tolist(), range(len(snps))))
                 ref_ld = ref_ld[ref_ld['SNP'].isin(snps['SNP'])]
+                ref_ld_indices = dict(zip(ref_ld['SNP'].tolist(), range(len(ref_ld))))
                 frq = pd.read_table(sub_chr(args.frqfile_chr, prev_chr) + '.frq', delim_whitespace=True)
                 frq = frq[frq['MAF'] > 0.05]
+                frq = dict(zip(frq['SNP'].tolist(), range(len(frq))))
                 all_summ = []
                 all_herit = []
 
             else:
-                curr_gene = line[0]
-                curr_gene_symb = line[1]
-                curr_chr = int(line[4])
+                curr_gene = line[columns[0]]
+                curr_gene_symb = line[columns[1]]
+                curr_chr = int(line[columns[4]])
                 if curr_gene == prev_gene and i < n_lines:
                     temp_gene_mat.append(line)
                     continue
@@ -184,7 +193,7 @@ def get_expression_scores(args):
                 if len(temp_gene_mat) < 10:
                     print('<10 SNPs around gene; skipping')
                 else:
-                    herit = estimate_expression_cis_herit(ref_ld, frq, temp_gene_mat)
+                    herit = estimate_expression_cis_herit(ref_ld, frq, temp_gene_mat, ref_ld_indices)
                     temp_gene_mat['EFF'] = temp_gene_mat['Z'].values**2 / temp_gene_mat['N'].values - 1 / temp_gene_mat['N'].values
                     temp_gene_mat = temp_gene_mat[['SNP','BP','EFF']]
                     all_herit.append([prev_gene, prev_gene_symb, prev_chr, herit[0], herit[1], herit[2]])
@@ -206,14 +215,14 @@ def get_expression_scores(args):
                     g_annot[j, gene_bins[j]] = 1
                     start_snp = all_summ[j][3]['SNP'].values[0]
                     end_snp = all_summ[j][3]['SNP'].values[-1]
-                    start_snp_idx = int(np.where(snps['SNP'] == start_snp)[0])
-                    end_snp_idx = int(np.where(snps['SNP'] == end_snp)[0])
+                    start_snp_idx = snp_indices[start_snp]
+                    end_snp_idx = snp_indices[end_snp]
 
                     if np.array_equal(snps.iloc[start_snp_idx:end_snp_idx+1, 1].values, all_summ[j][3]['SNP'].values):
                         eqtl_annot[start_snp_idx:end_snp_idx+1, gene_bins[j]] += all_summ[j][3]['EFF'].values
                     else:
-                        snp_indices = match(all_summ[j][3]['SNP'].tolist(), snps.iloc[:, 1].tolist())
-                        eqtl_annot[snp_indices, gene_bins[j]] += all_summ[j][3]['EFF'].values
+                        snp_idx = [snp_indices[x] for x in all_summ[j][3]['SNP'].tolist()]
+                        eqtl_annot[snp_idx, gene_bins[j]] += all_summ[j][3]['EFF'].values
 
                 g_annot_final = pd.DataFrame(np.c_[[x[0] for x in all_summ], [x[1] for x in all_summ], g_annot])
                 g_annot_final.columns = ['Gene', 'Gene_symbol'] + g_bin_names
@@ -222,12 +231,15 @@ def get_expression_scores(args):
                 all_herit = pd.DataFrame.from_records(all_herit,
                                                       columns=['Gene', 'Gene_symbol', 'Chrom', 'h2cis', 'h2cis_se',
                                                                'h2cis_p'])
-                matched_herit = all_herit.loc[all_herit['Gene'].isin(g_annot_final['Gene']), 'h2cis'].values
                 G = np.sum(g_annot, axis=0)
-                ave_cis_herit = np.dot(matched_herit, g_annot) / G
+                ave_cis_herit = []
+                for j in range(5):
+                    temp_herits = np.array(eqtl_herits)[np.where(gene_bins == j)[0]]
+                    ave_cis_herit.append(np.median(temp_herits))
 
                 np.savetxt('{}.{}.G'.format(args.out, prev_chr), G.reshape((1, len(G))), fmt='%d')
-                np.savetxt('{}.{}.ave_h2cis'.format(args.out, prev_chr), ave_cis_herit.reshape((1, len(ave_cis_herit))),
+                np.savetxt('{}.{}.ave_h2cis'.format(args.out, prev_chr),
+                           np.array(ave_cis_herit).reshape((1, len(ave_cis_herit))),
                            fmt="%.5f")
 
                 expscore = pd.DataFrame(np.c_[snps.values, eqtl_annot])
