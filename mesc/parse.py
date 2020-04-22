@@ -13,7 +13,6 @@ import re
 import os
 
 
-
 def series_eq(x, y):
     '''Compare series, return False if lengths not equal.'''
     return len(x) == len(y) and (x == y).all()

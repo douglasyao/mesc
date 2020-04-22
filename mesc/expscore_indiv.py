@@ -68,6 +68,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
             [args.plink_path, '--bfile', geno_fname, '--pheno', pheno_fname, '--make-bed', '--out', temp_geno_fname,
              '--chr', str(chr), '--from-bp', str(start_bp), '--to-bp', str(end_bp), '--extract', args.keep, '--silent',
              '--allow-no-sex'], stderr=FNULL)
+
     except subprocess.CalledProcessError:
         return 'NO_PLINK'
 
