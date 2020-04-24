@@ -128,7 +128,9 @@ parser.add_argument('--keep', default=os.path.join(dirname, 'data/hm3_snps.txt')
                     help='File with SNPs to include in expression score estimation. '
                     'The file should contain one SNP ID per row.')
 parser.add_argument('--save-estimates', default=False, action='store_true',
-                    help='Save eQTL estimates (necessary for gene set analyses)')
+                    help='Save eQTL estimates')
+parser.add_argument('--skip-expscore-estimation', default=False, action='store_true',
+                    help='Skip expression score estimation (only estimate eQTL effect sizes and h2cis)')
 
 
 # Compute expression scores from summary statistics

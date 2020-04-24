@@ -42,7 +42,7 @@ def flatten_list(x):
     else:
         return [x]
 
-def file_len(fname, input_chr):
+def file_len(fname, input_chr, chr_idx):
     '''
     Get number of genes in gene expression file on input chromosome
     '''
@@ -53,7 +53,7 @@ def file_len(fname, input_chr):
                 continue
             l = l.split()
             try:
-                chr = int(l[2])
+                chr = int(l[chr_idx])
             except:
                 continue
             if chr == input_chr:
@@ -73,6 +73,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
     pheno_fname = '{}/{}.pheno'.format(args.tmp, gene_name)
     temp_geno_fname = '{}/{}'.format(args.tmp, gene_name)
 
+    # making temporary phenotype file
     temp_pheno = pd.DataFrame([sample_names, sample_names, phenos]).T
     temp_pheno.to_csv(pheno_fname, sep='\t', index=False, header=False)
 
@@ -84,6 +85,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
              '--allow-no-sex'], stderr=FNULL)
 
     except subprocess.CalledProcessError:
+        subprocess.Popen('rm {}*'.format(temp_geno_fname), shell=True)
         return 'NO_PLINK'
 
     # make grm (for REML)
@@ -91,14 +93,9 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
         [args.plink_path, '--bfile', temp_geno_fname, '--allow-no-sex', '--make-grm-bin', '--out', temp_geno_fname, '--silent'])
 
     # estimate h2cis using REML
-    if args.covariates:
-        subprocess.call(
-            [args.gcta_path, '--grm', temp_geno_fname, '--pheno', pheno_fname, '--out', temp_geno_fname, '--reml',
-             '--reml-no-constrain', '--qcovar', args.covariates, '--reml-lrt', '1'], stdout=FNULL, stderr=FNULL)
-    else:
-        subprocess.call(
-            [args.gcta_path, '--grm', temp_geno_fname, '--pheno', pheno_fname, '--out', temp_geno_fname,
-             '--reml', '--reml-no-constrain', '--reml-lrt', '1'], stdout=FNULL, stderr=FNULL)
+    subprocess.call(
+        [args.gcta_path, '--grm', temp_geno_fname, '--pheno', pheno_fname, '--out', temp_geno_fname,
+         '--reml', '--reml-no-constrain', '--reml-lrt', '1'], stdout=FNULL, stderr=FNULL)
 
     hsq_fname = '{}.hsq'.format(temp_geno_fname)
 
@@ -123,12 +120,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
         tune = 0.05
 
     # estimate causal eQTL effect sizes using LASSO
-    if args.covariates:
-        subprocess.call(
-            [args.plink_path, '--allow-no-sex', '--bfile', temp_geno_fname, '--lasso', str(tune),
-             '--covar', args.covariates, '--out', temp_geno_fname, '--silent'], stdout=FNULL, stderr=FNULL)
-    else:
-        subprocess.call(
+    subprocess.call(
         [args.plink_path, '--allow-no-sex', '--bfile', temp_geno_fname, '--lasso', str(tune),
          '--out', temp_geno_fname, '--silent'], stdout=FNULL, stderr=FNULL)
 
@@ -151,15 +143,14 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
         lasso['CORR_EFFECT'] = np.nan
 
     lasso['GENE'] = gene_name
+    if lasso.shape[0] == 0:
+        lasso = np.nan
     out = (herit, herit_se, herit_p, lasso)
     subprocess.Popen('rm {}*'.format(temp_geno_fname), shell=True)
     return out
 
 def get_expression_scores(args):
     expmat = args.expression_matrix
-    n_genes = file_len(expmat, args.chr)
-    gene_num = 0
-    keep_snps = pd.read_csv(args.keep, header=None)
     if args.columns:
         columns = args.columns.split(',')
         columns = [int(x)-1 for x in columns]
@@ -167,6 +158,9 @@ def get_expression_scores(args):
             raise ValueError('Must specify 4 column indices with --columns')
     else:
         columns = range(4)
+    n_genes = file_len(expmat, args.chr, columns[1])
+    gene_num = 0
+    keep_snps = pd.read_csv(args.keep, header=None)
 
     print('Analyzing chromosome {}'.format(args.chr))
     all_lasso = []
@@ -176,6 +170,10 @@ def get_expression_scores(args):
     bim = pd.read_csv(geno_fname + '.bim', sep='\t', header=None)
     bim = bim.loc[bim[1].isin(keep_snps[0]),0:3]
     bim.columns = ['CHR', 'SNP', 'CM', 'BP']
+
+    if args.covariates:
+        covar = pd.read_csv(args.covariates, delim_whitespace=True)
+
     with open(expmat) as f:
 
         # compute h2cis and estimate LASSO effect sizes for all genes
@@ -183,7 +181,6 @@ def get_expression_scores(args):
             line = line.split()
             if j == 0:
                 sample_names = line[columns[3]:]
-                continue
             gene = line[columns[0]]
             try:
                 chr = int(line[columns[1]])
@@ -194,6 +191,13 @@ def get_expression_scores(args):
             start_bp = max(1, int(line[columns[2]]) - 5e5)
             end_bp = int(line[columns[2]]) + 5e5
             phenos = line[columns[3]:]
+
+            # regress out covariates
+            if args.covariates:
+                phenos = np.array([float(x) for x in phenos])
+                res = np.linalg.lstsq(covar.iloc[:,2:].values, phenos, rcond=None)
+                phenos -= np.dot(covar.iloc[:,2:].values, res[0])
+                phenos = phenos.tolist()
 
             gene_num += 1
             print('Estimating eQTL effect sizes for gene {} of {}: {}'.format(gene_num, n_genes, gene))
@@ -206,24 +210,24 @@ def get_expression_scores(args):
                 if isinstance(herit[3], pd.DataFrame):
                     all_lasso.append((gene, herit[0], herit[3]))
 
-        print('Computing expression scores for chromosome {}'.format(args.chr))
+        # load genotypes
         array_indivs = ps.PlinkFAMFile(geno_fname + '.fam')
         array_snps = ps.PlinkBIMFile(geno_fname + '.bim')
         keep_snps_indices = np.where(array_snps.df['SNP'].isin(keep_snps[0]))[0]
         keep_indiv_indices = np.where(array_indivs.df['IID'].isin(sample_names))[0]
-
-        # load genotypes
         with Suppressor():
-            geno_array = ld.PlinkBEDFile(geno_fname + '.bed', array_indivs.n, array_snps, keep_indivs=keep_indiv_indices,
-                                     keep_snps=keep_snps_indices)
+            geno_array = ld.PlinkBEDFile(geno_fname + '.bed', array_indivs.n, array_snps,
+                                         keep_indivs=keep_indiv_indices,
+                                         keep_snps=keep_snps_indices)
 
-        # create gene annotation file
+        # SNP indices for fast merging
         snp_indices = dict(zip(geno_array.df[:, 1].tolist(), range(len(geno_array.df))))
 
         # exclude genes with h2cis < 0 or not converged
         all_lasso_temp = [x for x in all_lasso if not np.isnan(x[1])]
         all_lasso_temp = [x for x in all_lasso_temp if x[1] > 0]
 
+        # create gene annotation files
         lasso_herits = [x[1] for x in all_lasso_temp]
         g_annot = np.zeros((len(all_lasso_temp), 5), dtype=int)
         eqtl_annot = np.zeros((len(geno_array.df), 5))
@@ -235,8 +239,22 @@ def get_expression_scores(args):
             eqtl_annot[snp_idx, gene_bins[j]] += np.square(all_lasso_temp[j][2]['CORR_EFFECT'].values)
 
         # estimate expression scores
-        block_left = ld.getBlockLefts(geno_array.df[:,2], 1e6)
-        res = geno_array.ldScoreVarBlocks(block_left, c=50, annot=eqtl_annot)
+        if not args.skip_expscore_estimation:
+            print('Computing expression scores'.format(args.chr))
+
+            block_left = ld.getBlockLefts(geno_array.df[:,2], 1e6)
+
+            # estimate expression scores
+            res = geno_array.ldScoreVarBlocks(block_left, c=50, annot=eqtl_annot)
+            expscore = pd.DataFrame(np.c_[geno_array.df[:, :3], res])
+            expscore.columns = geno_array.colnames[:3] + g_bin_names
+
+            for name in g_bin_names:
+                expscore[name] = expscore[name].astype(float)
+
+            expscore.to_csv('{}.{}.expscore.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip',
+                            float_format='%.5f')
+
         g_annot_final = pd.DataFrame(np.c_[[x[0] for x in all_lasso_temp], g_annot])
         g_annot_final.columns = ['Gene'] + g_bin_names
         g_annot_final.to_csv('{}.{}.gannot.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip')
@@ -248,14 +266,6 @@ def get_expression_scores(args):
 
         np.savetxt('{}.{}.G'.format(args.out, args.chr), G.reshape((1, len(G))), fmt='%d')
         np.savetxt('{}.{}.ave_h2cis'.format(args.out, args.chr), ave_cis_herit.reshape((1, len(ave_cis_herit))), fmt="%.5f")
-
-        expscore = pd.DataFrame(np.c_[geno_array.df[:,:3], res])
-        expscore.columns = geno_array.colnames[:3] + g_bin_names
-
-        for name in g_bin_names:
-            expscore[name] = expscore[name].astype(float)
-
-        expscore.to_csv('{}.{}.expscore.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip', float_format='%.5f')
         all_herit.to_csv('{}.{}.hsq'.format(args.out, args.chr), sep='\t', index=False, float_format='%.5f')
 
         if args.save_estimates:
