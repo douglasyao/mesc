@@ -165,8 +165,8 @@ parser.add_argument('--input-prefixes', default=None, type=str,
                     help='File containing list of file prefixes for .lasso and .hsq files to meta-analyze over.'
                          'One name per line.')
 parser.add_argument('--bfile', default=None, type=str,
-                    help='Sample genotypes to go along with gene expression matrix. Prefix for PLINK .bed/.bim/.fam file.'
-                         'Can only analyze one chromosome at a time, so must be split by chromosome.')
+                    help='Genotypes used to compute expression scores, which should be ancestry-matched to GWAS samples.'
+                         'We recommend using 1000 Genomes.')
 parser.add_argument('--chr', default=None, type=int,
                     help='Chromosome number.')
 parser.add_argument('--keep', default=os.path.join(dirname, 'data/hm3_snps.txt'), type=str,

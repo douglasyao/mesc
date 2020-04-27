@@ -110,18 +110,13 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
         herit_p = np.nan
 
     if np.isnan(herit) or herit < 0:
-        print('Warning: h2cis < 0 or not converged')
-        # still estimate LASSO effs for genes w/ h2cis < 0 for output
-
-    # set LASSO tuning parameter to estimated herit, otherwise 0.05
-    if not np.isnan(herit):
-        tune = herit
-    else:
-        tune = 0.05
+        print('Skipping; h2cis < 0 or not converged')
+        subprocess.Popen('rm {}*'.format(temp_geno_fname), shell=True)
+        return (herit, herit_se, herit_p, np.nan)
 
     # estimate causal eQTL effect sizes using LASSO
     subprocess.call(
-        [args.plink_path, '--allow-no-sex', '--bfile', temp_geno_fname, '--lasso', str(tune),
+        [args.plink_path, '--allow-no-sex', '--bfile', temp_geno_fname, '--lasso', str(herit),
          '--out', temp_geno_fname, '--silent'], stdout=FNULL, stderr=FNULL)
 
     if os.path.exists('{}.lasso'.format(temp_geno_fname)):
