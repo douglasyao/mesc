@@ -131,14 +131,6 @@ parser.add_argument('--est-lasso-only', default=False, action='store_true',
                     help='Skip expression score estimation (only estimate eQTL effect sizes using LASSO and '
                          'h2cis using REML)')
 
-# Meta-analyze individual level expression scores across conditions/tissues
-parser.add_argument('--meta-analyze', default=False, action='store_true',
-                    help='Meta-analyze individual-level expression scores across conditions/tissues')
-parser.add_argument('--input-dir', default=None, type=str,
-                    help='Directory containing .lasso and .hsq files')
-parser.add_argument('--input-prefixes', default=None, type=str,
-                    help='Prefixes of .lasso and .hsq files to meta-analyze over')
-
 
 # Compute expression scores from summary statistics
 # Required flags

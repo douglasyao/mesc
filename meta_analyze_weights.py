@@ -31,16 +31,21 @@ class Suppressor(object):
     def write(self, x): pass
 
 def meta_analyze(args):
-    input_prefixes = args.input_prefixes.split(',')
+    input_prefixes = []
+    with open(args.input_prefixes) as f:
+        for l in f:
+            l = l.strip()
+            input_prefixes.append(l)
     input_prefixes_name = ['{}.{}'.format(x, args.chr) for x in input_prefixes]
     genes = get_gene_list(input_prefixes_name)
     # gene indices for fast merging
     gene_indices = dict(zip(genes, range(len(genes))))
     num = np.zeros(len(genes))
-    denom = np.zeros(len(genes))
+    count = np.zeros(len(genes))
     all_lasso = pd.DataFrame()
 
-    # meta-analyze REML h2cis estimates using inverse variance weighting
+    # meta-analyze REML h2cis estimates by taking simple average
+    # inverse-variance weighing has issues, since REML SE is downwardly biased for small h2 estimates
     for input in input_prefixes:
         cond = os.path.basename(input)
         lasso = pd.read_csv('{}.{}.lasso'.format(input, args.chr), sep='\t')
@@ -48,19 +53,15 @@ def meta_analyze(args):
         all_lasso = all_lasso.append(lasso)
         reml = pd.read_csv('{}.{}.hsq'.format(input, args.chr), sep='\t')
         reml.dropna(inplace=True)
-        reml = reml[reml['h2cis_se'] != 0]
         gene_idx = [gene_indices[x] for x in reml['Gene'].tolist()]
-        num[gene_idx] += reml['h2cis'].values / np.square(reml['h2cis_se'])
-        denom[gene_idx] += 1 / np.square(reml['h2cis_se'])
+        num[gene_idx] += reml['h2cis'].values
+        count[gene_idx] += 1
 
-    denom[np.isinf(denom)] = np.nan
-    denom[denom == 0] = np.nan
-    meta_h2cis = num / denom
-    meta_h2cis_se = np.sqrt(1 / denom)
+    count[count == 0] = np.nan
+    meta_h2cis = num / count
     meta_h2cis_out = pd.DataFrame({'Gene': genes,
                                    'Chrom': args.chr,
-                                   'h2cis': meta_h2cis,
-                                   'h2cis_se': meta_h2cis_se})
+                                   'h2cis': meta_h2cis})
     meta_h2cis_out.to_csv(args.out + '.hsq', sep='\t', index=False)
 
     keep_snps = pd.read_csv(args.keep, header=None)
@@ -108,8 +109,8 @@ def meta_analyze(args):
 
     g_annot = np.array(g_annot)
     g_annot_final = pd.DataFrame(np.c_[g_annot_names, g_annot])
-    g_bin_names = ['Gene'] + ['Cis_herit_bin_{}'.format(x) for x in range(1, 6)]
-    g_annot_final.columns = g_bin_names
+    g_bin_names = ['Cis_herit_bin_{}'.format(x) for x in range(1, 6)]
+    g_annot_final.columns = ['Gene'] + g_bin_names
     g_annot_final.to_csv('{}.{}.gannot.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip')
 
     G = np.sum(g_annot, axis=0)
@@ -161,7 +162,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--out', default=None, type=str,
                     help='Output filename prefix.')
 parser.add_argument('--input-prefixes', default=None, type=str,
-                    help='Comma separated list of file prefixes for .lasso and .hsq files to meta-analyze over.')
+                    help='File containing list of file prefixes for .lasso and .hsq files to meta-analyze over.'
+                         'One name per line.')
 parser.add_argument('--bfile', default=None, type=str,
                     help='Sample genotypes to go along with gene expression matrix. Prefix for PLINK .bed/.bim/.fam file.'
                          'Can only analyze one chromosome at a time, so must be split by chromosome.')
