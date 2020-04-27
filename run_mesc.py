@@ -127,10 +127,17 @@ parser.add_argument('--tmp', default=os.path.join(dirname, 'tmp'), type=str,
 parser.add_argument('--keep', default=os.path.join(dirname, 'data/hm3_snps.txt'), type=str,
                     help='File with SNPs to include in expression score estimation. '
                     'The file should contain one SNP ID per row.')
-parser.add_argument('--save-estimates', default=False, action='store_true',
-                    help='Save eQTL estimates')
-parser.add_argument('--skip-expscore-estimation', default=False, action='store_true',
-                    help='Skip expression score estimation (only estimate eQTL effect sizes and h2cis)')
+parser.add_argument('--est-lasso-only', default=False, action='store_true',
+                    help='Skip expression score estimation (only estimate eQTL effect sizes using LASSO and '
+                         'h2cis using REML)')
+
+# Meta-analyze individual level expression scores across conditions/tissues
+parser.add_argument('--meta-analyze', default=False, action='store_true',
+                    help='Meta-analyze individual-level expression scores across conditions/tissues')
+parser.add_argument('--input-dir', default=None, type=str,
+                    help='Directory containing .lasso and .hsq files')
+parser.add_argument('--input-prefixes', default=None, type=str,
+                    help='Prefixes of .lasso and .hsq files to meta-analyze over')
 
 
 # Compute expression scores from summary statistics
