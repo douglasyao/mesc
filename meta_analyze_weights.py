@@ -1,7 +1,7 @@
 '''
 Meta-analyze LASSO-predicted eQTL weights across multiple tissues/conditions.
-Takes a commma separated list of file prefixes for .lasso and .hsq files, outputs .expscore, .G, and .ave_h2cis files
-meta-analyzed across all conditions.
+Takes a commma separated list of file prefixes for .lasso and .hsq files and PLINK bed file, outputs .expscore, .G,
+and .ave_h2cis files meta-analyzed across all conditions.
 '''
 
 from __future__ import division
@@ -30,14 +30,27 @@ class Suppressor(object):
 
     def write(self, x): pass
 
-def meta_analyze(args):
-    input_prefixes = []
-    with open(args.input_prefixes) as f:
+def read_file_line(fname):
+    '''
+    Read file with one item per line into list
+    '''
+    lines = []
+    with open(fname, 'rb') as f:
         for l in f:
             l = l.strip()
-            input_prefixes.append(l)
+            lines.append(l)
+    return lines
+
+def meta_analyze(args):
+    '''
+    Meta-analyze weights
+    '''
+    input_prefixes = read_file_line(args.input_prefixes)
     input_prefixes_name = ['{}.{}'.format(x, args.chr) for x in input_prefixes]
     genes = get_gene_list(input_prefixes_name)
+    if args.genes:
+        keep_genes = read_file_line(args.genes)
+        genes = [x for x in genes if x in keep_genes]
     # gene indices for fast merging
     gene_indices = dict(zip(genes, range(len(genes))))
     num = np.zeros(len(genes))
@@ -75,14 +88,14 @@ def meta_analyze(args):
     filtered_meta_h2cis = meta_h2cis_out[meta_h2cis_out['h2cis'] > 0] # filter out genes w/h2cis < 0
     filtered_meta_h2cis = filtered_meta_h2cis[~np.isnan(filtered_meta_h2cis['h2cis'])]
     g_annot_meta = {} # gene membership in bins
-    gene_bins = pd.qcut(filtered_meta_h2cis['h2cis'], 5, labels=range(5)).astype(int)
+    gene_bins = pd.qcut(filtered_meta_h2cis['h2cis'], args.num_bins, labels=range(args.num_bins)).astype(int)
     filtered_meta_h2cis['Bin'] = gene_bins
     for j in range(len(filtered_meta_h2cis)):
         g_annot_meta[filtered_meta_h2cis.iloc[j,1]] = gene_bins.iloc[j]
 
     g_annot = []
     g_annot_names = []
-    eqtl_annot = np.zeros((len(bim), 5))
+    eqtl_annot = np.zeros((len(bim), args.num_bins))
 
     # create eQTL annot (for expscore) and gene annot
     print('Combining eQTL weights')
@@ -102,14 +115,14 @@ def meta_analyze(args):
                 bias = np.sqrt(temp_h2cis / emp_herit)
             temp_lasso_weights *= bias
             eqtl_annot[snp_idx, g_annot_meta[gene]] += np.square(temp_lasso_weights)
-            g_annot_toadd = np.zeros(5)
+            g_annot_toadd = np.zeros(args.num_bins)
             g_annot_toadd[g_annot_meta[gene]] = 1
             g_annot.append(g_annot_toadd)
             g_annot_names.append(gene + '_' + temp_cond)
 
     g_annot = np.array(g_annot)
     g_annot_final = pd.DataFrame(np.c_[g_annot_names, g_annot])
-    g_bin_names = ['Cis_herit_bin_{}'.format(x) for x in range(1, 6)]
+    g_bin_names = ['Cis_herit_bin_{}'.format(x) for x in range(1, args.num_bins+1)]
     g_annot_final.columns = ['Gene'] + g_bin_names
     g_annot_final.to_csv('{}.{}.gannot.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip')
 
@@ -174,7 +187,11 @@ parser.add_argument('--chr', default=None, type=int,
                     help='Chromosome number.')
 parser.add_argument('--keep', default=os.path.join(dirname, 'data/hm3_snps.txt'), type=str,
                     help='File with SNPs to include in expression score estimation. '
-                         'The file should contain one SNP ID per row.')
+                         'The file should contain one SNP ID per row. Default is Hapmap3 SNPs')
+parser.add_argument('--num-bins', default=5, type=int,
+                    help='Number of expression cis-heritability bins. Default 5.')
+parser.add_argument('--genes', default=None, type=str,
+                    help='File containing list of genes to retain in the analysis. One gene name per line.')
 
 if __name__ == '__main__':
 
@@ -189,9 +206,3 @@ if __name__ == '__main__':
         raise ValueError('Must specify --chr')
 
     meta_analyze(args)
-
-
-
-
-
-

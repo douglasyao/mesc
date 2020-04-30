@@ -240,10 +240,7 @@ def get_expression_scores(args):
     all_herit.to_csv('{}.{}.hsq'.format(args.out, args.chr), sep='\t', index=False, float_format='%.5f', na_rep='NA')
 
     # output LASSO estimates
-    try:
-        lasso_out = pd.concat([x[2] for x in all_lasso])
-    except:
-        print(all_lasso)
+    lasso_out = pd.concat([x[2] for x in all_lasso])
     lasso_out = lasso_out[['GENE', 'CHR', 'SNP', 'EFFECT']]
     lasso_out.to_csv('{}.{}.lasso'.format(args.out, args.chr), sep='\t', index=False, float_format='%.8f', na_rep='NA')
 

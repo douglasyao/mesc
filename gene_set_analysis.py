@@ -1,7 +1,5 @@
 '''
-Meta-analyze LASSO-predicted eQTL weights across multiple tissues/conditions.
-Takes a commma separated list of file prefixes for .lasso and .hsq files, outputs .expscore, .G, and .ave_h2cis files
-meta-analyzed across all conditions.
+Compute expression scores for gene sets. Expression scores can be meta-analyzed over multiple tissues/conditions or not.
 '''
 
 from __future__ import division
@@ -31,15 +29,138 @@ class Suppressor(object):
 
     def write(self, x): pass
 
-def meta_analyze(args):
-    input_prefixes = []
-    with open(args.input_prefixes) as f:
+def read_file_line(fname):
+    '''
+    Read file with one item per line into list
+    '''
+    lines = []
+    with open(fname, 'rb') as f:
         for l in f:
             l = l.strip()
-            input_prefixes.append(l)
+            lines.append(l)
+    return lines
+
+def create_gset_expscore(args):
+    '''
+    Create gene set expression scores
+    '''
+    input_prefix = '{}.{}'.format(args.input_prefix, args.chr)
+    gsets = read_gene_sets(args.gene_sets)
+
+    lasso = pd.read_csv(input_prefix + '.lasso', sep='\t')
+    h2cis = pd.read_csv(input_prefix + '.hsq', sep='\t')
+    h2cis.dropna(inplace=True)
+
+    keep_snps = pd.read_csv(args.keep, header=None)
+    geno_fname = args.bfile
+    bim = pd.read_csv(geno_fname + '.bim', sep='\t', header=None) # load bim
+    bim = bim.loc[(bim[0] == args.chr).values & bim[1].isin(keep_snps[0]).values, 0:3]
+    bim.columns = ['CHR', 'SNP', 'CM', 'BP']
+
+    # keep genes with nonzero h2cis
+    snp_indices = dict(zip(bim['SNP'].tolist(), range(len(bim))))  # SNP indices for fast merging
+    filtered_h2cis = h2cis[h2cis['h2cis'] > 0]  # filter out genes w/h2cis < 0
+    filtered_h2cis = filtered_h2cis[~np.isnan(filtered_h2cis['h2cis'])]
+    filtered_gene_indices = dict(zip(filtered_h2cis['Gene'].tolist(), range(len(filtered_h2cis))))
+
+    # get gset names
+    gset_names = []
+    for k in gsets.keys():
+        gset_names.extend(['{}_Cis_herit_bin_{}'.format(k, x) for x in range(1,args.num_bins+1)])
+
+    # create dict indicating gene membership in each gene set
+    ave_h2cis = [] # compute average cis-heritability of genes in bin
+    gene_gset_dict = defaultdict(list)
+    for k, v in gsets.items():
+        temp_genes = [x for x in v if x in filtered_h2cis['Gene'].tolist()]
+        temp_herit = filtered_h2cis.iloc[[filtered_gene_indices[x] for x in temp_genes], 2]
+        gene_bins = pd.qcut(temp_herit, args.num_bins, labels=range(args.num_bins)).astype(int).tolist()
+        temp_combined_herit = pd.DataFrame(np.c_[temp_herit.tolist(), gene_bins])
+        temp_h2cis = temp_combined_herit.groupby([1]).mean()
+        temp_h2cis = temp_h2cis[0].values
+        ave_h2cis.extend(temp_h2cis)
+        for i, gene in enumerate(temp_genes):
+            gene_gset_dict[gene].append('{}_Cis_herit_bin_{}'.format(k, gene_bins[i]+1))
+    gset_indices = dict(zip(gset_names, range(len(gset_names))))
+
+    g_annot = []
+    glist = []
+    eqtl_annot = np.zeros((len(bim), len(gset_names)))
+
+    # create eQTL annot (for expscore) and gene annot
+    print('Combining eQTL weights')
+    for i in range(len(filtered_h2cis)):
+        gene = filtered_h2cis.iloc[i, 0]
+        temp_h2cis = filtered_h2cis.iloc[i, 2]
+        temp_lasso = lasso[lasso['GENE'] == gene]
+        if len(temp_lasso) == 0:
+            continue
+        if gene not in gene_gset_dict.keys():
+            g_annot.append(np.zeros(len(gset_names)))
+        else:
+            snp_idx = [snp_indices[x] for x in temp_lasso['SNP'].tolist()]
+            temp_lasso_weights = temp_lasso['EFFECT'].values
+            emp_herit = np.sum(np.square(temp_lasso_weights))
+            if emp_herit <= 0:  # scale eQTL weights to h2cis
+                bias = 0
+            else:
+                bias = np.sqrt(temp_h2cis / emp_herit)
+            temp_lasso_weights *= bias
+            temp_gset_indices = [gset_indices[x] for x in gene_gset_dict[gene]]
+            for gset in temp_gset_indices:
+                eqtl_annot[snp_idx, gset] += np.square(temp_lasso_weights)
+            g_annot_toadd = np.zeros(len(gset_names))
+            g_annot_toadd[temp_gset_indices] = 1
+            g_annot.append(g_annot_toadd)
+        glist.append(gene)
+
+    g_annot = np.array(g_annot)
+    g_annot_final = pd.DataFrame(np.c_[glist, g_annot])
+    g_annot_final.columns = ['Gene'] + gset_names
+    for i in range(1, g_annot_final.shape[1]):
+        g_annot_final.iloc[:,i] = pd.to_numeric(g_annot_final.iloc[:,i]).astype(int)
+    g_annot_final.to_csv('{}.{}.gannot.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip')
+
+    # output .G and .ave_h2cis files
+    G = np.sum(g_annot, axis=0)
+    np.savetxt('{}.{}.G'.format(args.out, args.chr), G.reshape((1, len(G))), fmt='%d')
+    np.savetxt('{}.{}.ave_h2cis'.format(args.out, args.chr), np.array(ave_h2cis).reshape((1, len(ave_h2cis))),
+               fmt="%.5f")
+
+    print('Computing expression scores')
+    # load genotypes
+    array_indivs = ps.PlinkFAMFile(geno_fname + '.fam')
+    array_snps = ps.PlinkBIMFile(geno_fname + '.bim')
+    keep_snps_indices = np.where((array_snps.df['CHR'] == args.chr).values & array_snps.df['SNP'].isin(keep_snps[0]).values)[0]
+
+    with Suppressor():
+        geno_array = ld.PlinkBEDFile(geno_fname + '.bed', array_indivs.n, array_snps,
+                                     keep_snps=keep_snps_indices)
+
+    block_left = ld.getBlockLefts(geno_array.df[:, 2], 1e6)
+
+    # estimate expression scores
+    res = geno_array.ldScoreVarBlocks(block_left, c=50, annot=eqtl_annot)
+    expscore = pd.DataFrame(np.c_[geno_array.df[:, :3], res])
+    expscore.columns = geno_array.colnames[:3] + gset_names
+
+    for name in gset_names:
+        expscore[name] = expscore[name].astype(float)
+
+    # output files
+    expscore.to_csv('{}.{}.expscore.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip',
+                    float_format='%.5f')
+    print('Done!')
+
+
+def create_gset_expscore_meta(args):
+    '''
+    Create gene set expression scores meta-analyzed over several tissues/conditions
+    '''
+    input_prefixes = read_file_line(args.input_prefix_meta)
     input_prefixes_name = ['{}.{}'.format(x, args.chr) for x in input_prefixes]
     genes = get_gene_list(input_prefixes_name)
-    gsets = read_gene_sets(args.gene_sets, genes)
+    gsets = read_gene_sets(args.gene_sets)
 
     # gene indices for fast merging
     gene_indices = dict(zip(genes, range(len(genes))))
@@ -171,15 +292,15 @@ def meta_analyze(args):
                     float_format='%.5f')
     print('Done!')
 
-def read_gene_sets(fname, genes):
+def read_gene_sets(fname):
     '''
-    Read gene sets from file. Retain genes in 'genes'.
+    Read gene sets from file.
     '''
     gsets = OrderedDict()
     with open(fname, 'rb') as f:
         for line in f:
             line = line.strip().split()
-            gsets[line[0]] = [x for x in line[1:] if x in genes]
+            gsets[line[0]] = line[1:]
     return gsets
 
 
@@ -249,4 +370,7 @@ if __name__ == '__main__':
         raise ValueError('Must specify --chr')
     if args.gene_sets is None:
         raise ValueError('Must specify --gene-sets')
-    meta_analyze(args)
+    if args.input_prefix_meta:
+        create_gset_expscore_meta(args)
+    elif args.input_prefix:
+        create_gset_expscore(args)
