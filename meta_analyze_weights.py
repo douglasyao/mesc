@@ -66,6 +66,7 @@ def meta_analyze(args):
         all_lasso = all_lasso.append(lasso)
         reml = pd.read_csv('{}.{}.hsq'.format(input, args.chr), sep='\t')
         reml.dropna(inplace=True)
+        reml = reml[reml['Gene'].isin(genes)]
         gene_idx = [gene_indices[x] for x in reml['Gene'].tolist()]
         num[gene_idx] += reml['h2cis'].values
         count[gene_idx] += 1

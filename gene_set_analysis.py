@@ -57,24 +57,39 @@ def create_gset_expscore(args):
     bim = bim.loc[(bim[0] == args.chr).values & bim[1].isin(keep_snps[0]).values, 0:3]
     bim.columns = ['CHR', 'SNP', 'CM', 'BP']
 
-    # keep genes with nonzero h2cis
+    # keep genes with positive h2cis and converged LASSO
     snp_indices = dict(zip(bim['SNP'].tolist(), range(len(bim))))  # SNP indices for fast merging
     filtered_h2cis = h2cis[h2cis['h2cis'] > 0]  # filter out genes w/h2cis < 0
     filtered_h2cis = filtered_h2cis[~np.isnan(filtered_h2cis['h2cis'])]
+    filtered_h2cis = filtered_h2cis[filtered_h2cis['Gene'].isin(lasso['GENE'])]
+    if args.genes:
+        keep_genes = read_file_line(args.genes)
+        filtered_h2cis = filtered_h2cis[filtered_h2cis['Gene'].isin(keep_genes)]
+    # filtered_h2cis determines final gene annot
     filtered_gene_indices = dict(zip(filtered_h2cis['Gene'].tolist(), range(len(filtered_h2cis))))
 
     # get gset names
-    gset_names = []
+    gset_names = ['Cis_herit_bin_{}'.format(x) for x in range(1,args.num_background_bins+1)]
     for k in gsets.keys():
-        gset_names.extend(['{}_Cis_herit_bin_{}'.format(k, x) for x in range(1,args.num_bins+1)])
+        gset_names.extend(['{}_Cis_herit_bin_{}'.format(k, x) for x in range(1,args.num_gene_bins+1)])
 
     # create dict indicating gene membership in each gene set
-    ave_h2cis = [] # compute average cis-heritability of genes in bin
+    ave_h2cis = []  # compute average cis-heritability of genes in bin
     gene_gset_dict = defaultdict(list)
+    # background gene set
+    gene_bins = pd.qcut(filtered_h2cis['h2cis'], args.num_background_bins, labels=range(args.num_background_bins)).astype(int).tolist()
+    temp_combined_herit = pd.DataFrame(np.c_[filtered_h2cis['h2cis'], gene_bins])
+    temp_h2cis = temp_combined_herit.groupby([1]).mean()
+    temp_h2cis = temp_h2cis[0].values
+    ave_h2cis.extend(temp_h2cis)
+    for i, gene in enumerate(filtered_h2cis['Gene']):
+        gene_gset_dict[gene].append('Cis_herit_bin_{}'.format(gene_bins[i]+1))
+
+    # remaining gene sets
     for k, v in gsets.items():
         temp_genes = [x for x in v if x in filtered_h2cis['Gene'].tolist()]
         temp_herit = filtered_h2cis.iloc[[filtered_gene_indices[x] for x in temp_genes], 2]
-        gene_bins = pd.qcut(temp_herit, args.num_bins, labels=range(args.num_bins)).astype(int).tolist()
+        gene_bins = pd.qcut(temp_herit, args.num_gene_bins, labels=range(args.num_gene_bins)).astype(int).tolist()
         temp_combined_herit = pd.DataFrame(np.c_[temp_herit.tolist(), gene_bins])
         temp_h2cis = temp_combined_herit.groupby([1]).mean()
         temp_h2cis = temp_h2cis[0].values
@@ -193,24 +208,40 @@ def create_gset_expscore_meta(args):
     bim = bim.loc[(bim[0] == args.chr).values & bim[1].isin(keep_snps[0]).values, 0:3]
     bim.columns = ['CHR', 'SNP', 'CM', 'BP']
 
-    # keep genes with nonzero h2cis
+    # keep genes with positive h2cis and converged LASSO
     snp_indices = dict(zip(bim['SNP'].tolist(), range(len(bim))))  # SNP indices for fast merging
     filtered_meta_h2cis = meta_h2cis_out[meta_h2cis_out['h2cis'] > 0]  # filter out genes w/h2cis < 0
     filtered_meta_h2cis = filtered_meta_h2cis[~np.isnan(filtered_meta_h2cis['h2cis'])]
+    filtered_meta_h2cis = filtered_meta_h2cis[filtered_meta_h2cis['Gene'].isin(all_lasso['GENE'])] # keep genes with converged LASSO
+    if args.genes:
+        keep_genes = read_file_line(args.genes)
+        filtered_meta_h2cis = filtered_meta_h2cis[filtered_meta_h2cis['Gene'].isin(keep_genes)]
+    # filtered_meta_h2cis determines final gene annot
     filtered_gene_indices = dict(zip(filtered_meta_h2cis['Gene'].tolist(), range(len(filtered_meta_h2cis))))
 
     # get gset names
-    gset_names = []
+    gset_names = ['Cis_herit_bin_{}'.format(x) for x in range(1,args.num_background_bins+1)]
     for k in gsets.keys():
-        gset_names.extend(['{}_Cis_herit_bin_{}'.format(k, x) for x in range(1,args.num_bins+1)])
+        gset_names.extend(['{}_Cis_herit_bin_{}'.format(k, x) for x in range(1,args.num_gene_bins+1)])
 
     # create dict indicating gene membership in each gene set
     ave_h2cis = [] # compute average cis-heritability of genes in bin
     gene_gset_dict = defaultdict(list)
+
+    # background gene set
+    gene_bins = pd.qcut(filtered_meta_h2cis['h2cis'], args.num_background_bins,
+                        labels=range(args.num_background_bins)).astype(int).tolist()
+    temp_combined_herit = pd.DataFrame(np.c_[filtered_meta_h2cis['h2cis'], gene_bins])
+    temp_h2cis = temp_combined_herit.groupby([1]).mean()
+    temp_h2cis = temp_h2cis[0].values
+    ave_h2cis.extend(temp_h2cis)
+    for i, gene in enumerate(filtered_meta_h2cis['Gene']):
+        gene_gset_dict[gene].append('Cis_herit_bin_{}'.format(gene_bins[i] + 1))
+
     for k, v in gsets.items():
         temp_genes = [x for x in v if x in filtered_meta_h2cis['Gene'].tolist()]
         temp_herit = filtered_meta_h2cis.iloc[[filtered_gene_indices[x] for x in temp_genes], 2]
-        gene_bins = pd.qcut(temp_herit, args.num_bins, labels=range(args.num_bins)).astype(int).tolist()
+        gene_bins = pd.qcut(temp_herit, args.num_gene_bins, labels=range(args.num_gene_bins)).astype(int).tolist()
         temp_combined_herit = pd.DataFrame(np.c_[temp_herit.tolist(), gene_bins])
         temp_h2cis = temp_combined_herit.groupby([1]).mean()
         temp_h2cis = temp_h2cis[0].values
@@ -352,8 +383,13 @@ parser.add_argument('--keep', default=os.path.join(dirname, 'data/hm3_snps.txt')
 parser.add_argument('--make-kb-window', default=None, type=int,
                     help='Optional: generate SNP annotation corresponding to x kb window around genes in gene set, '
                          'where x is the input value. Compute LD scores with these annotations.')
-parser.add_argument('--num-bins', default=3, type=int,
+parser.add_argument('--num-gene-bins', default=3, type=int,
                     help='Number of bins to split each gene set into. Default 3.')
+parser.add_argument('--num-background-bins', default=5, type=int,
+                    help='Number of bins to split background set of all genes into. Default 5.')
+parser.add_argument('--genes', default=None, type=str,
+                    help='File containing set of background genes to retain in analysis. h2med enrichment is computed '
+                         'relative to background set of genes. One name per line')
 
 if __name__ == '__main__':
 
