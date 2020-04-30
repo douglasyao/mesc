@@ -302,7 +302,7 @@ def estimate_h2med(args, log):
     cis_hsqhat = reg.H2med(chisq, ref_ld, cis_g_ld, s(sumstats[w_ld_cname]), s(sumstats.N),
                      M_annot, cis_G, cis_ave_h2_cis, n_blocks=n_blocks)
     cis_groups = g_list[cis_indices]
-    g_annot_cnames = [[y + 2 for y in x] for x in g_ld_indices]
+    g_annot_cnames = [[y + 1 for y in x] for x in g_ld_indices]
     g_overlap_matrix, G_tot = _read_g_annot(args, log, g_annot_cnames)
     cis_overlap_matrix = g_overlap_matrix[np.ix_(cis_indices, cis_indices)]
     cis_results = cis_hsqhat._g_overlap_output(cis_g_ld_cnames, cis_overlap_matrix, cis_G, G_tot, cis_ave_h2_cis, cis_groups)

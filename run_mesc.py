@@ -111,12 +111,12 @@ parser.add_argument('--plink-path', default=None, type=str,
                     help='Path to plink')
 parser.add_argument('--expression-matrix', default=None, type=str,
                     help='Gene by sample expression matrix')
-parser.add_argument('--exp_bfile', default=None, type=str,
+parser.add_argument('--exp-bfile', default=None, type=str,
                     help='Sample genotypes to go along with gene expression matrix. Prefix for PLINK .bed/.bim/.fam file.'
                          'Can only analyze one chromosome at a time, so must be split by chromosome.')
 parser.add_argument('--chr', default=None, type=int,
                     help='Which chromosome input genotypes lie on. Can only analyze one chromosome at a time')
-parser.add_argument('--geno_bfile', default=None, type=str,
+parser.add_argument('--geno-bfile', default=None, type=str,
                     help='Genotypes used to compute expression scores, which should be ancestry-matched to GWAS samples.'
                          'We recommend using 1000 Genomes.')
 
@@ -133,8 +133,6 @@ parser.add_argument('--keep', default=os.path.join(dirname, 'data/hm3_snps.txt')
 parser.add_argument('--est-lasso-only', default=False, action='store_true',
                     help='Skip expression score estimation (only estimate eQTL effect sizes using LASSO and '
                          'h2cis using REML)')
-
-
 
 # Compute expression scores from summary statistics
 # Required flags
@@ -215,10 +213,12 @@ if __name__ == '__main__':
                 raise ValueError('Must specify --plink-path with --compute-expscore-indiv')
             if args.expression_matrix is None:
                 raise ValueError('Must specify --expression-matrix with --compute-expscore-indiv')
-            if not args.bfile:
-                raise ValueError('Must specify --bfile or --bfile-chr with --compute-expscore-indiv')
+            if not args.exp_bfile:
+                raise ValueError('Must specify --exp_bfile with --compute-expscore-indiv')
             if not args.chr:
                 raise ValueError('Must specify --chr with --compute-expscore-indiv')
+            if not args.est_lasso_only and not args.geno_bfile:
+                raise ValueError('Must specify --geno-bfile with --compute-expscore-indiv unless --est-lasso-only set')
             subprocess.call(['mkdir', '-p', args.tmp])
             ind.get_expression_scores(args)
 

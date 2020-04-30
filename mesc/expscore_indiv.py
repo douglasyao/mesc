@@ -60,7 +60,7 @@ def file_len(fname, input_chr, chr_idx):
                 count += 1
     return count
 
-def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample_names, chr):
+def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample_names, chr, covar):
     '''
     Create cis-region genotype file, estimate eQTL effects sizes using LASSO, and estimate expression cis-heritability using REML
     :return herit: REML-estimated h2cis
@@ -72,10 +72,20 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
     FNULL = open(os.devnull, 'w')
     pheno_fname = '{}/{}.pheno'.format(args.tmp, gene_name)
     temp_geno_fname = '{}/{}'.format(args.tmp, gene_name)
-
     # making temporary phenotype file
     temp_pheno = pd.DataFrame([sample_names, sample_names, phenos]).T
     temp_pheno.to_csv(pheno_fname, sep='\t', index=False, header=False)
+
+    # for some reason LASSO performs better when covariates are regressed out of phenotype instead of being included in regression
+    # REML performs better when covariates are included rather than regressed out
+    if covar is not None:
+        pheno_covar_fname = '{}/{}_covar.pheno'.format(args.tmp, gene_name)
+        phenos_reg = np.array([float(x) for x in phenos])
+        res = np.linalg.lstsq(covar.iloc[:, 2:].values, phenos_reg, rcond=None)
+        phenos_reg -= np.dot(covar.iloc[:, 2:].values, res[0])
+        phenos_reg = phenos_reg.tolist()
+        temp_pheno_reg = pd.DataFrame([sample_names, sample_names, phenos_reg]).T
+        temp_pheno_reg.to_csv(pheno_covar_fname, sep='\t', index=False, header=False)
 
     # create cis-region genotype file
     try:
@@ -93,9 +103,14 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
         [args.plink_path, '--bfile', temp_geno_fname, '--allow-no-sex', '--make-grm-bin', '--out', temp_geno_fname, '--silent'])
 
     # estimate h2cis using REML
-    subprocess.call(
-        [args.gcta_path, '--grm', temp_geno_fname, '--pheno', pheno_fname, '--out', temp_geno_fname,
-         '--reml', '--reml-no-constrain', '--reml-lrt', '1'], stdout=FNULL, stderr=FNULL)
+    if covar is not None:
+        subprocess.call(
+            [args.gcta_path, '--grm', temp_geno_fname, '--pheno', pheno_fname, '--qcovar', args.covariates, '--out', temp_geno_fname,
+             '--reml', '--reml-no-constrain', '--reml-lrt', '1'], stdout=FNULL, stderr=FNULL)
+    else:
+        subprocess.call(
+            [args.gcta_path, '--grm', temp_geno_fname, '--pheno', pheno_fname, '--out', temp_geno_fname,
+             '--reml', '--reml-no-constrain', '--reml-lrt', '1'], stdout=FNULL, stderr=FNULL)
 
     hsq_fname = '{}.hsq'.format(temp_geno_fname)
 
@@ -110,14 +125,22 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
         herit_p = np.nan
 
     if np.isnan(herit) or herit < 0:
-        print('Skipping; h2cis < 0 or not converged')
+        if np.isnan(herit):
+            print('Skipping; REML did not converge')
+        elif herit < 0:
+            print('Skipping; h2cis < 0')
         subprocess.Popen('rm {}*'.format(temp_geno_fname), shell=True)
         return (herit, herit_se, herit_p, np.nan)
 
     # estimate causal eQTL effect sizes using LASSO
-    subprocess.call(
-        [args.plink_path, '--allow-no-sex', '--bfile', temp_geno_fname, '--lasso', str(herit),
-         '--out', temp_geno_fname, '--silent'], stdout=FNULL, stderr=FNULL)
+    if covar is not None:
+        subprocess.call(
+            [args.plink_path, '--allow-no-sex', '--bfile', temp_geno_fname, '--lasso', str(herit), '--pheno', pheno_covar_fname,
+             '--out', temp_geno_fname, '--silent'], stdout=FNULL, stderr=FNULL)
+    else:
+        subprocess.call(
+            [args.plink_path, '--allow-no-sex', '--bfile', temp_geno_fname, '--lasso', str(herit),
+             '--out', temp_geno_fname, '--silent'], stdout=FNULL, stderr=FNULL)
 
     if os.path.exists('{}.lasso'.format(temp_geno_fname)):
         lasso = pd.read_csv('{}.lasso'.format(temp_geno_fname), sep='\t')
@@ -162,13 +185,15 @@ def get_expression_scores(args):
     all_herit = []
     glist = []
 
-    geno_fname = args.bfile
+    geno_fname = args.exp_bfile
     bim = pd.read_csv(geno_fname + '.bim', sep='\t', header=None)
     bim = bim.loc[bim[1].isin(keep_snps[0]),0:3]
     bim.columns = ['CHR', 'SNP', 'CM', 'BP']
 
     if args.covariates:
         covar = pd.read_csv(args.covariates, delim_whitespace=True)
+    else:
+        covar = None
 
     with open(expmat) as f:
 
@@ -200,14 +225,7 @@ def get_expression_scores(args):
                 print('Skipping; "/" in gene name')
                 continue
 
-            # regress out covariates
-            if args.covariates:
-                phenos = np.array([float(x) for x in phenos])
-                res = np.linalg.lstsq(covar.iloc[:, 2:].values, phenos, rcond=None)
-                phenos -= np.dot(covar.iloc[:, 2:].values, res[0])
-                phenos = phenos.tolist()
-
-            herit = get_eqtl_annot(args, gene, phenos, start_bp, end_bp, geno_fname, sample_names, chr)
+            herit = get_eqtl_annot(args, gene, phenos, start_bp, end_bp, geno_fname, sample_names, chr, covar)
 
             if herit == 'NO_PLINK':
                 print('Skipping; no SNPS around gene')
@@ -222,7 +240,10 @@ def get_expression_scores(args):
     all_herit.to_csv('{}.{}.hsq'.format(args.out, args.chr), sep='\t', index=False, float_format='%.5f', na_rep='NA')
 
     # output LASSO estimates
-    lasso_out = pd.concat([x[2] for x in all_lasso])
+    try:
+        lasso_out = pd.concat([x[2] for x in all_lasso])
+    except:
+        print(all_lasso)
     lasso_out = lasso_out[['GENE', 'CHR', 'SNP', 'EFFECT']]
     lasso_out.to_csv('{}.{}.lasso'.format(args.out, args.chr), sep='\t', index=False, float_format='%.8f', na_rep='NA')
 
@@ -231,12 +252,13 @@ def get_expression_scores(args):
 
         # create gene annotation files
         # load genotypes
-        array_indivs = ps.PlinkFAMFile(geno_fname + '.fam')
-        array_snps = ps.PlinkBIMFile(geno_fname + '.bim')
+        sc_geno_fname = args.geno_bfile
+        array_indivs = ps.PlinkFAMFile(sc_geno_fname + '.fam')
+        array_snps = ps.PlinkBIMFile(sc_geno_fname + '.bim')
         keep_snps_indices = np.where(array_snps.df['SNP'].isin(keep_snps[0]))[0]
         keep_indiv_indices = np.where(array_indivs.df['IID'].isin(sample_names))[0]
         with Suppressor():
-            geno_array = ld.PlinkBEDFile(geno_fname + '.bed', array_indivs.n, array_snps,
+            geno_array = ld.PlinkBEDFile(sc_geno_fname + '.bed', array_indivs.n, array_snps,
                                          keep_indivs=keep_indiv_indices,
                                          keep_snps=keep_snps_indices)
         # SNP indices as dict for fast merging
