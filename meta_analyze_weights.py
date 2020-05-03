@@ -125,6 +125,8 @@ def meta_analyze(args):
     g_annot_final = pd.DataFrame(np.c_[g_annot_names, g_annot])
     g_bin_names = ['Cis_herit_bin_{}'.format(x) for x in range(1, args.num_bins+1)]
     g_annot_final.columns = ['Gene'] + g_bin_names
+    for i in range(1, g_annot_final.shape[1]):
+        g_annot_final.iloc[:,i] = pd.to_numeric(g_annot_final.iloc[:,i]).astype(int)
     g_annot_final.to_csv('{}.{}.gannot.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip')
 
     G = np.sum(g_annot, axis=0)

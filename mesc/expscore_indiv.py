@@ -168,6 +168,9 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
     return out
 
 def get_expression_scores(args):
+    '''
+    Estimate expression scores and expression cis-heritability
+    '''
     expmat = args.expression_matrix
     if args.columns:
         columns = args.columns.split(',')
@@ -186,9 +189,6 @@ def get_expression_scores(args):
     glist = []
 
     geno_fname = args.exp_bfile
-    bim = pd.read_csv(geno_fname + '.bim', sep='\t', header=None)
-    bim = bim.loc[bim[1].isin(keep_snps[0]),0:3]
-    bim.columns = ['CHR', 'SNP', 'CM', 'BP']
 
     if args.covariates:
         covar = pd.read_csv(args.covariates, delim_whitespace=True)
@@ -202,6 +202,7 @@ def get_expression_scores(args):
             line = line.split()
             if j == 0:
                 sample_names = line[columns[3]:]
+                continue
             gene = line[columns[0]]
 
             try:
@@ -252,7 +253,7 @@ def get_expression_scores(args):
         sc_geno_fname = args.geno_bfile
         array_indivs = ps.PlinkFAMFile(sc_geno_fname + '.fam')
         array_snps = ps.PlinkBIMFile(sc_geno_fname + '.bim')
-        keep_snps_indices = np.where(array_snps.df['SNP'].isin(keep_snps[0]))[0]
+        keep_snps_indices = np.where((array_snps.df['CHR'] == args.chr).values & array_snps.df['SNP'].isin(keep_snps[0]).values)[0]
         keep_indiv_indices = np.where(array_indivs.df['IID'].isin(sample_names))[0]
         with Suppressor():
             geno_array = ld.PlinkBEDFile(sc_geno_fname + '.bed', array_indivs.n, array_snps,
@@ -265,10 +266,10 @@ def get_expression_scores(args):
         all_lasso_temp = [x for x in all_lasso_temp if x[1] > 0]
 
         lasso_herits = [x[1] for x in all_lasso_temp]
-        g_annot = np.zeros((len(all_lasso_temp), 5), dtype=int)
-        eqtl_annot = np.zeros((len(geno_array.df), 5))
-        gene_bins = pd.qcut(np.array(lasso_herits), 5, labels=range(5)).astype(int)
-        g_bin_names = ['Cis_herit_bin_{}'.format(x) for x in range(1, 6)]
+        g_annot = np.zeros((len(all_lasso_temp), args.num_bins), dtype=int)
+        eqtl_annot = np.zeros((len(geno_array.df), args.num_bins))
+        gene_bins = pd.qcut(np.array(lasso_herits), args.num_bins, labels=range(args.num_bins)).astype(int)
+        g_bin_names = ['Cis_herit_bin_{}'.format(x) for x in range(1, args.num_bins+1)]
         for j in range(0, len(all_lasso_temp)):
             g_annot[j, gene_bins[j]] = 1
             snp_idx = [snp_indices[x] for x in all_lasso_temp[j][2]['SNP'].tolist()]

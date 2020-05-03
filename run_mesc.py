@@ -100,8 +100,8 @@ def __filter__(fname, noun, verb, merge_obj):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--out', default='mesc', type=str,
-                    help='Output filename prefix. Default is "mesc"')
+parser.add_argument('--out', default=None, type=str,
+                    help='Output filename prefix.')
 
 # Compute expression scores from individual level data
 # Required flags
@@ -143,8 +143,8 @@ parser.add_argument('--eqtl-sumstat', default=None, type=str,
 # Optional flags
 parser.add_argument('--columns', default=None, type=str,
                     help='List of indices separated by commas.')
-parser.add_argument('--frqfile-chr', default=os.path.join(dirname, 'data/frq_common/1000G.EUR.QC.'), type=str,
-                    help='Prefix for --frqfile files split over chromosome.')
+parser.add_argument('--num-bins', default=5, type=int,
+                    help='Number of expression cis-heritability bins. Default 5.')
 
 
 # Estimate mediated heritability
@@ -175,6 +175,10 @@ parser.add_argument('--w-ld', default=None, type=str,
 parser.add_argument('--w-ld-chr', default=None, type=str,
                     help='Same as --w-ld, but will read files split into 22 chromosomes in the same '
                          'manner as --ref-ld-chr.')
+parser.add_argument('--frqfile', default=None, type=str,
+                    help='')
+parser.add_argument('--frqfile-chr', default=os.path.join(dirname, 'data/frq_common/1000G.EUR.QC.'), type=str,
+                    help='Prefix for --frqfile files split over chromosome.')
 parser.add_argument('--ref-ld-remove-annot', default=None, type=str,
                     help='LD scores to remove.')
 parser.add_argument('--ref-ld-keep-annot', default=None, type=str,
@@ -204,6 +208,9 @@ if __name__ == '__main__':
         log.log(header)
         log.log('Beginning analysis at {T}'.format(T=time.ctime()))
         start_time = time.time()
+
+        if not args.out:
+            raise ValueError('Must specify --out')
 
         if args.compute_expscore_indiv and args.compute_expscore_sumstat:
             raise ValueError('Cannot set both --compute-expscore-indiv and --compute-expscore-sumstat')

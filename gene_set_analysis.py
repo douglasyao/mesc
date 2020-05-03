@@ -167,7 +167,6 @@ def create_gset_expscore(args):
                     float_format='%.5f')
     print('Done!')
 
-
 def create_gset_expscore_meta(args):
     '''
     Create gene set expression scores meta-analyzed over several tissues/conditions
@@ -334,7 +333,6 @@ def read_gene_sets(fname):
             gsets[line[0]] = line[1:]
     return gsets
 
-
 def get_gene_list(input_prefixes):
     '''
     Get union of all genes found in all input files
@@ -348,7 +346,6 @@ def get_gene_list(input_prefixes):
                 genes.append(line.split()[0])
     genes = list(set(genes))
     return genes
-
 
 def flatten(items):
     '''
@@ -380,9 +377,6 @@ parser.add_argument('--chr', default=None, type=int,
 parser.add_argument('--keep', default=os.path.join(dirname, 'data/hm3_snps.txt'), type=str,
                     help='File with SNPs to include in expression score estimation. '
                          'The file should contain one SNP ID per row.')
-parser.add_argument('--make-kb-window', default=None, type=int,
-                    help='Optional: generate SNP annotation corresponding to x kb window around genes in gene set, '
-                         'where x is the input value. Compute LD scores with these annotations.')
 parser.add_argument('--num-gene-bins', default=3, type=int,
                     help='Number of bins to split each gene set into. Default 3.')
 parser.add_argument('--num-background-bins', default=5, type=int,
@@ -396,10 +390,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.out is None:
         raise ValueError('Must specify --out')
-    if not (args.input_prefix or args.input_prefix_meta):
-        raise ValueError('Must specify --input-prefix or --input-prefix-meta')
-    if (args.input_prefix and args.input_prefix_meta):
-        raise ValueError('Cannot specify both --input-prefix and --input-prefix-meta')
+    if not args.make_kb_window:
+        if not (args.input_prefix or args.input_prefix_meta):
+            raise ValueError('Must specify --input-prefix or --input-prefix-meta')
+        if (args.input_prefix and args.input_prefix_meta):
+            raise ValueError('Cannot specify both --input-prefix and --input-prefix-meta')
     if args.bfile is None:
         raise ValueError('Must specify --bfile')
     if args.chr is None:
@@ -410,3 +405,4 @@ if __name__ == '__main__':
         create_gset_expscore_meta(args)
     elif args.input_prefix:
         create_gset_expscore(args)
+
