@@ -390,11 +390,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.out is None:
         raise ValueError('Must specify --out')
-    if not args.make_kb_window:
-        if not (args.input_prefix or args.input_prefix_meta):
-            raise ValueError('Must specify --input-prefix or --input-prefix-meta')
-        if (args.input_prefix and args.input_prefix_meta):
-            raise ValueError('Cannot specify both --input-prefix and --input-prefix-meta')
+    if not (args.input_prefix or args.input_prefix_meta):
+        raise ValueError('Must specify --input-prefix or --input-prefix-meta')
+    if (args.input_prefix and args.input_prefix_meta):
+        raise ValueError('Cannot specify both --input-prefix and --input-prefix-meta')
     if args.bfile is None:
         raise ValueError('Must specify --bfile')
     if args.chr is None:

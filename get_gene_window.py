@@ -78,7 +78,7 @@ def create_window_ldsc(args):
 parser = argparse.ArgumentParser()
 parser.add_argument('--make-kb-window', default=100, type=int,
                     help='Generate SNP annotation corresponding to x kb window around genes in gene set, '
-                         'where x is the input value. Default is ')
+                         'where x is the input value. Default is 100')
 parser.add_argument('--gene-coords', default=os.path.join(dirname, 'data/gene_coords.txt'), type=str,
                     help='File containing the gene locations of files. '
                          'By default, we supply this file in data/gene_locations.txt')
