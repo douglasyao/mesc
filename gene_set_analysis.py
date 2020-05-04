@@ -11,8 +11,11 @@ import argparse
 import mesc.ldscore as ld
 import mesc.parse as ps
 import sys
+import copy
 
+N_CHR=2
 dirname = os.path.dirname(__file__)
+pd.set_option('display.max_rows',10)
 
 class Suppressor(object):
     '''
@@ -47,9 +50,15 @@ def create_gset_expscore(args):
     input_prefix = '{}.{}'.format(args.input_prefix, args.chr)
     gsets = read_gene_sets(args.gene_sets)
 
-    lasso = pd.read_csv(input_prefix + '.lasso', sep='\t')
-    h2cis = pd.read_csv(input_prefix + '.hsq', sep='\t')
+    h2cis = pd.DataFrame()
+
+    # read in all chromosome, since partitioning should be by gene across genome (makes a difference for small gene sets)
+    for i in range(1, N_CHR+1):
+        temp_h2cis = pd.read_csv('{}.{}.hsq'.format(args.input_prefix, i), sep='\t')
+        h2cis = h2cis.append(temp_h2cis)
     h2cis.dropna(inplace=True)
+
+    lasso = pd.read_csv(input_prefix + '.lasso', sep='\t')
 
     keep_snps = pd.read_csv(args.keep, header=None)
     geno_fname = args.bfile
@@ -61,11 +70,10 @@ def create_gset_expscore(args):
     snp_indices = dict(zip(bim['SNP'].tolist(), range(len(bim))))  # SNP indices for fast merging
     filtered_h2cis = h2cis[h2cis['h2cis'] > 0]  # filter out genes w/h2cis < 0
     filtered_h2cis = filtered_h2cis[~np.isnan(filtered_h2cis['h2cis'])]
-    filtered_h2cis = filtered_h2cis[filtered_h2cis['Gene'].isin(lasso['GENE'])]
     if args.genes:
         keep_genes = read_file_line(args.genes)
         filtered_h2cis = filtered_h2cis[filtered_h2cis['Gene'].isin(keep_genes)]
-    # filtered_h2cis determines final gene annot
+    # retain genes across all chromosome for binning
     filtered_gene_indices = dict(zip(filtered_h2cis['Gene'].tolist(), range(len(filtered_h2cis))))
 
     # get gset names
@@ -78,9 +86,13 @@ def create_gset_expscore(args):
     gene_gset_dict = defaultdict(list)
     # background gene set
     gene_bins = pd.qcut(filtered_h2cis['h2cis'], args.num_background_bins, labels=range(args.num_background_bins)).astype(int).tolist()
-    temp_combined_herit = pd.DataFrame(np.c_[filtered_h2cis['h2cis'], gene_bins])
-    temp_h2cis = temp_combined_herit.groupby([1]).mean()
-    temp_h2cis = temp_h2cis[0].values
+    temp_combined_herit = pd.DataFrame(np.c_[filtered_h2cis[['Gene', 'Chrom','h2cis']], gene_bins])
+    temp_combined_herit[1] = temp_combined_herit[1].astype(int)
+    temp_combined_herit[2] = temp_combined_herit[2].astype(float)
+    temp_combined_herit[3] = temp_combined_herit[3].astype(int)
+    temp_combined_herit = temp_combined_herit[temp_combined_herit[1] == args.chr]
+    temp_h2cis = temp_combined_herit[[2,3]].groupby([3]).mean()
+    temp_h2cis = temp_h2cis[2].values
     ave_h2cis.extend(temp_h2cis)
     for i, gene in enumerate(filtered_h2cis['Gene']):
         gene_gset_dict[gene].append('Cis_herit_bin_{}'.format(gene_bins[i]+1))
@@ -88,15 +100,27 @@ def create_gset_expscore(args):
     # remaining gene sets
     for k, v in gsets.items():
         temp_genes = [x for x in v if x in filtered_h2cis['Gene'].tolist()]
-        temp_herit = filtered_h2cis.iloc[[filtered_gene_indices[x] for x in temp_genes], 2]
-        gene_bins = pd.qcut(temp_herit, args.num_gene_bins, labels=range(args.num_gene_bins)).astype(int).tolist()
-        temp_combined_herit = pd.DataFrame(np.c_[temp_herit.tolist(), gene_bins])
-        temp_h2cis = temp_combined_herit.groupby([1]).mean()
-        temp_h2cis = temp_h2cis[0].values
+        temp_herit = filtered_h2cis.iloc[[filtered_gene_indices[x] for x in temp_genes], [0,1,2]]
+        gene_bins = pd.qcut(temp_herit['h2cis'], args.num_gene_bins, labels=range(args.num_gene_bins)).astype(int).tolist() # bin first, then subset chr
+        temp_combined_herit = pd.DataFrame(np.c_[temp_herit, gene_bins])
+        temp_combined_herit[1] = temp_combined_herit[1].astype(int)
+        temp_combined_herit[2] = temp_combined_herit[2].astype(float)
+        temp_combined_herit[3] = temp_combined_herit[3].astype(int)
+        temp_combined_herit = temp_combined_herit[temp_combined_herit[1] == args.chr] # subset chr
+
+        # sometimes for small gene sets, bins will contain no genes for individual chromosomes
+        bins = temp_combined_herit[3].tolist()
+        copy_herit = copy.deepcopy(temp_combined_herit)
+        for i in range(args.num_gene_bins):
+            if i not in bins:
+                copy_herit = copy_herit.append([['GENE',0,0,i]])
+        temp_h2cis = copy_herit[[2, 3]].groupby([3]).mean()
+        temp_h2cis = temp_h2cis[2].values
         ave_h2cis.extend(temp_h2cis)
-        for i, gene in enumerate(temp_genes):
-            gene_gset_dict[gene].append('{}_Cis_herit_bin_{}'.format(k, gene_bins[i]+1))
+        for i, gene in enumerate(temp_combined_herit[0].values):
+            gene_gset_dict[gene].append('{}_Cis_herit_bin_{}'.format(k, temp_combined_herit[3].values[i]+1))
     gset_indices = dict(zip(gset_names, range(len(gset_names))))
+    filtered_h2cis = filtered_h2cis[filtered_h2cis['Gene'].isin(lasso['GENE'])] # finally retain just genes on input chr
 
     g_annot = []
     glist = []
@@ -173,7 +197,7 @@ def create_gset_expscore_meta(args):
     '''
     input_prefixes = read_file_line(args.input_prefix_meta)
     input_prefixes_name = ['{}.{}'.format(x, args.chr) for x in input_prefixes]
-    genes = get_gene_list(input_prefixes_name)
+    genes = get_gene_list(input_prefixes)
     gsets = read_gene_sets(args.gene_sets)
 
     # gene indices for fast merging
@@ -189,17 +213,20 @@ def create_gset_expscore_meta(args):
         lasso = pd.read_csv('{}.{}.lasso'.format(input, args.chr), sep='\t')
         lasso['COND'] = cond
         all_lasso = all_lasso.append(lasso)
-        reml = pd.read_csv('{}.{}.hsq'.format(input, args.chr), sep='\t')
-        reml.dropna(inplace=True)
-        gene_idx = [gene_indices[x] for x in reml['Gene'].tolist()]
-        num[gene_idx] += reml['h2cis'].values
+        all_reml = pd.DataFrame()
+        for i in range(1, N_CHR+1):
+            reml = pd.read_csv('{}.{}.hsq'.format(input, i), sep='\t')
+            reml.dropna(inplace=True)
+            all_reml = all_reml.append(reml)
+        gene_idx = [gene_indices[x] for x in all_reml['Gene'].tolist()]
+        num[gene_idx] += all_reml['h2cis'].values
         count[gene_idx] += 1
 
     count[count == 0] = np.nan
     meta_h2cis = num / count
     meta_h2cis_out = pd.DataFrame({'Gene': genes,
                                    'Chrom': args.chr,
-                                   'h2cis': meta_h2cis})
+                                   'h2cis': meta_h2cis}, columns=['Gene', 'Chrom', 'h2cis'])
 
     keep_snps = pd.read_csv(args.keep, header=None)
     geno_fname = args.bfile
@@ -209,14 +236,13 @@ def create_gset_expscore_meta(args):
 
     # keep genes with positive h2cis and converged LASSO
     snp_indices = dict(zip(bim['SNP'].tolist(), range(len(bim))))  # SNP indices for fast merging
-    filtered_meta_h2cis = meta_h2cis_out[meta_h2cis_out['h2cis'] > 0]  # filter out genes w/h2cis < 0
-    filtered_meta_h2cis = filtered_meta_h2cis[~np.isnan(filtered_meta_h2cis['h2cis'])]
-    filtered_meta_h2cis = filtered_meta_h2cis[filtered_meta_h2cis['Gene'].isin(all_lasso['GENE'])] # keep genes with converged LASSO
+    filtered_h2cis = meta_h2cis_out[meta_h2cis_out['h2cis'] > 0]  # filter out genes w/h2cis < 0
+    filtered_h2cis = filtered_h2cis[~np.isnan(filtered_h2cis['h2cis'])]
     if args.genes:
         keep_genes = read_file_line(args.genes)
-        filtered_meta_h2cis = filtered_meta_h2cis[filtered_meta_h2cis['Gene'].isin(keep_genes)]
-    # filtered_meta_h2cis determines final gene annot
-    filtered_gene_indices = dict(zip(filtered_meta_h2cis['Gene'].tolist(), range(len(filtered_meta_h2cis))))
+        filtered_h2cis = filtered_h2cis[filtered_h2cis['Gene'].isin(keep_genes)]
+    # retain genes across all chromosome for binning
+    filtered_gene_indices = dict(zip(filtered_h2cis['Gene'].tolist(), range(len(filtered_h2cis))))
 
     # get gset names
     gset_names = ['Cis_herit_bin_{}'.format(x) for x in range(1,args.num_background_bins+1)]
@@ -224,30 +250,47 @@ def create_gset_expscore_meta(args):
         gset_names.extend(['{}_Cis_herit_bin_{}'.format(k, x) for x in range(1,args.num_gene_bins+1)])
 
     # create dict indicating gene membership in each gene set
-    ave_h2cis = [] # compute average cis-heritability of genes in bin
+    ave_h2cis = []  # compute average cis-heritability of genes in bin
     gene_gset_dict = defaultdict(list)
-
     # background gene set
-    gene_bins = pd.qcut(filtered_meta_h2cis['h2cis'], args.num_background_bins,
+    gene_bins = pd.qcut(filtered_h2cis['h2cis'], args.num_background_bins,
                         labels=range(args.num_background_bins)).astype(int).tolist()
-    temp_combined_herit = pd.DataFrame(np.c_[filtered_meta_h2cis['h2cis'], gene_bins])
-    temp_h2cis = temp_combined_herit.groupby([1]).mean()
-    temp_h2cis = temp_h2cis[0].values
+    temp_combined_herit = pd.DataFrame(np.c_[filtered_h2cis[['Gene', 'Chrom', 'h2cis']], gene_bins])
+    temp_combined_herit[1] = temp_combined_herit[1].astype(int)
+    temp_combined_herit[2] = temp_combined_herit[2].astype(float)
+    temp_combined_herit[3] = temp_combined_herit[3].astype(int)
+    temp_combined_herit = temp_combined_herit[temp_combined_herit[1] == args.chr]
+    temp_h2cis = temp_combined_herit[[2, 3]].groupby([3]).mean()
+    temp_h2cis = temp_h2cis[2].values
     ave_h2cis.extend(temp_h2cis)
-    for i, gene in enumerate(filtered_meta_h2cis['Gene']):
+    for i, gene in enumerate(filtered_h2cis['Gene']):
         gene_gset_dict[gene].append('Cis_herit_bin_{}'.format(gene_bins[i] + 1))
 
+    # remaining gene sets
     for k, v in gsets.items():
-        temp_genes = [x for x in v if x in filtered_meta_h2cis['Gene'].tolist()]
-        temp_herit = filtered_meta_h2cis.iloc[[filtered_gene_indices[x] for x in temp_genes], 2]
-        gene_bins = pd.qcut(temp_herit, args.num_gene_bins, labels=range(args.num_gene_bins)).astype(int).tolist()
-        temp_combined_herit = pd.DataFrame(np.c_[temp_herit.tolist(), gene_bins])
-        temp_h2cis = temp_combined_herit.groupby([1]).mean()
-        temp_h2cis = temp_h2cis[0].values
+        temp_genes = [x for x in v if x in filtered_h2cis['Gene'].tolist()]
+        temp_herit = filtered_h2cis.iloc[[filtered_gene_indices[x] for x in temp_genes], [0, 1, 2]]
+        gene_bins = pd.qcut(temp_herit['h2cis'], args.num_gene_bins, labels=range(args.num_gene_bins)).astype(
+            int).tolist()  # bin first, then subset chr
+        temp_combined_herit = pd.DataFrame(np.c_[temp_herit, gene_bins])
+        temp_combined_herit[1] = temp_combined_herit[1].astype(int)
+        temp_combined_herit[2] = temp_combined_herit[2].astype(float)
+        temp_combined_herit[3] = temp_combined_herit[3].astype(int)
+        temp_combined_herit = temp_combined_herit[temp_combined_herit[1] == args.chr]  # subset chr
+
+        # sometimes for small gene sets, bins will contain no genes for individual chromosomes
+        bins = temp_combined_herit[3].tolist()
+        copy_herit = copy.deepcopy(temp_combined_herit)
+        for i in range(args.num_gene_bins):
+            if i not in bins:
+                copy_herit = copy_herit.append([['GENE', 0, 0, i]])
+        temp_h2cis = copy_herit[[2, 3]].groupby([3]).mean()
+        temp_h2cis = temp_h2cis[2].values
         ave_h2cis.extend(temp_h2cis)
-        for i, gene in enumerate(temp_genes):
-            gene_gset_dict[gene].append('{}_Cis_herit_bin_{}'.format(k, gene_bins[i]+1))
+        for i, gene in enumerate(temp_combined_herit[0].values):
+            gene_gset_dict[gene].append('{}_Cis_herit_bin_{}'.format(k, temp_combined_herit[3].values[i] + 1))
     gset_indices = dict(zip(gset_names, range(len(gset_names))))
+    filtered_h2cis = filtered_h2cis[filtered_h2cis['Gene'].isin(all_lasso['GENE'])]  # finally retain just genes on input chr
 
     g_annot = []
     g_annot_names = []
@@ -255,9 +298,9 @@ def create_gset_expscore_meta(args):
 
     # create eQTL annot (for expscore) and gene annot
     print('Combining eQTL weights')
-    for i in range(len(filtered_meta_h2cis)):
-        gene = filtered_meta_h2cis.iloc[i, 1]
-        temp_h2cis = filtered_meta_h2cis.iloc[i, 2]
+    for i in range(len(filtered_h2cis)):
+        gene = filtered_h2cis.iloc[i, 1]
+        temp_h2cis = filtered_h2cis.iloc[i, 2]
         temp_lasso = all_lasso[all_lasso['GENE'] == gene]
         unique_conds = pd.unique(temp_lasso['COND'])
         if gene not in gene_gset_dict.keys():
@@ -339,11 +382,12 @@ def get_gene_list(input_prefixes):
     '''
     genes = []
     for file in input_prefixes:
-        fname = file + '.hsq'
-        with open(fname, 'rb') as f:
-            next(f)
-            for line in f:
-                genes.append(line.split()[0])
+        for i in range(1,N_CHR+1):
+            fname = '{}.{}.hsq'.format(file, i)
+            with open(fname, 'rb') as f:
+                next(f)
+                for line in f:
+                    genes.append(line.split()[0])
     genes = list(set(genes))
     return genes
 
