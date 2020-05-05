@@ -208,6 +208,7 @@ def get_expression_scores(args):
             try:
                 chr = int(line[columns[1]])
             except:
+                print('Skipping; chromosome number "{}" is not numeric. Make sure chromosome numbers are just numbers'.format(line[columns[1]]))
                 continue
             if chr != args.chr:
                 continue
@@ -237,7 +238,7 @@ def get_expression_scores(args):
             glist.append(gene)
 
     if len(all_lasso) == 0:
-        raise ValueError('Something is wrong with input data; check that sample names match across files')
+        raise ValueError('No weights estimated; something is wrong with input data.')
 
     # output h2cis estimates
     all_herit = pd.DataFrame.from_records(all_herit, columns=['Gene', 'Chrom', 'h2cis', 'h2cis_se', 'h2cis_p'])
