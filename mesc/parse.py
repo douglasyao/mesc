@@ -117,11 +117,11 @@ def filter_columns(fh, compression, fsuffix, args):
 
     elif fsuffix == 'expscore':
         if args.exp_keep_annot:
-            tokeep = ['Cis_herit_bin'] + ['{}_Cis_herit_bin'.format(x) for x in args.g_ld_keep_annot.split(',')]
+            tokeep = ['Cis_herit_bin'] + ['{}_Cis_herit_bin'.format(x) for x in args.exp_keep_annot.split(',')]
             cgroups = [re.sub('(Cis_herit_bin)(_?[0-9]+(L2)?$)', '\\1', x) for x in cnames]
             indices = [i for i, x in enumerate(cgroups) if x in tokeep]
         elif args.exp_remove_annot:
-            toremove = ['{}_Cis_herit_bin'.format(x) for x in args.g_ld_keep_annot.split(',')]
+            toremove = ['{}_Cis_herit_bin'.format(x) for x in args.exp_keep_annot.split(',')]
             cgroups = [re.sub('(Cis_herit_bin)(_?[0-9]+(L2)?$)', '\\1', x) for x in cnames]
             indices = [i for i, x in enumerate(cgroups) if x not in toremove]
         else:

@@ -236,6 +236,9 @@ def get_expression_scores(args):
                     all_lasso.append((gene, herit[0], herit[3]))
             glist.append(gene)
 
+    if len(all_lasso) == 0:
+        raise ValueError('Something is wrong with input data; check that sample names match across files')
+
     # output h2cis estimates
     all_herit = pd.DataFrame.from_records(all_herit, columns=['Gene', 'Chrom', 'h2cis', 'h2cis_se', 'h2cis_p'])
     all_herit.to_csv('{}.{}.hsq'.format(args.out, args.chr), sep='\t', index=False, float_format='%.5f', na_rep='NA')

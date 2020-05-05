@@ -13,7 +13,7 @@ import mesc.parse as ps
 import sys
 import copy
 
-N_CHR=2
+N_CHR=22
 dirname = os.path.dirname(__file__)
 pd.set_option('display.max_rows',10)
 
@@ -50,8 +50,8 @@ def create_gset_expscore(args):
     input_prefix = '{}.{}'.format(args.input_prefix, args.chr)
     gsets = read_gene_sets(args.gene_sets)
 
+    print('Reading eQTL weights')
     h2cis = pd.DataFrame()
-
     # read in all chromosome, since partitioning should be by gene across genome (makes a difference for small gene sets)
     for i in range(1, N_CHR+1):
         temp_h2cis = pd.read_csv('{}.{}.hsq'.format(args.input_prefix, i), sep='\t')
@@ -206,6 +206,7 @@ def create_gset_expscore_meta(args):
     count = np.zeros(len(genes))
     all_lasso = pd.DataFrame()
 
+    print('Reading eQTL weights')
     # meta-analyze REML h2cis estimates by taking simple average
     # inverse-variance weighing has issues, since REML SE is downwardly biased for small h2 estimates
     for input in input_prefixes:
@@ -299,7 +300,7 @@ def create_gset_expscore_meta(args):
     # create eQTL annot (for expscore) and gene annot
     print('Combining eQTL weights')
     for i in range(len(filtered_h2cis)):
-        gene = filtered_h2cis.iloc[i, 1]
+        gene = filtered_h2cis.iloc[i, 0]
         temp_h2cis = filtered_h2cis.iloc[i, 2]
         temp_lasso = all_lasso[all_lasso['GENE'] == gene]
         unique_conds = pd.unique(temp_lasso['COND'])
