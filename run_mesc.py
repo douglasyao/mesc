@@ -224,8 +224,8 @@ if __name__ == '__main__':
                 raise ValueError('Must specify --exp_bfile with --compute-expscore-indiv')
             if not args.chr:
                 raise ValueError('Must specify --chr with --compute-expscore-indiv')
-            if not args.est_lasso_only and not args.geno_bfile:
-                raise ValueError('Must specify --geno-bfile with --compute-expscore-indiv unless --est-lasso-only set')
+            if not args.geno_bfile:
+                raise ValueError('Must specify --geno-bfile with --compute-expscore-indiv')
             subprocess.call(['mkdir', '-p', args.tmp])
             ind.get_expression_scores(args)
 

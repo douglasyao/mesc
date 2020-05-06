@@ -79,6 +79,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
     :return herit_p: h2cis p-value
     :return lasso: eQTL effect size estimates from LASSO
     '''
+    keep_snp_name = args.tmp + '/keep_snps_temp.txt'
 
     FNULL = open(os.devnull, 'w')
     pheno_fname = '{}/{}.pheno'.format(args.tmp, gene_name)
@@ -102,7 +103,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
     try:
         subprocess.check_output(
             [args.plink_path, '--bfile', geno_fname, '--pheno', pheno_fname, '--make-bed', '--out', temp_geno_fname,
-             '--chr', str(chr), '--from-bp', str(start_bp), '--to-bp', str(end_bp), '--extract', args.keep, '--silent',
+             '--chr', str(chr), '--from-bp', str(start_bp), '--to-bp', str(end_bp), '--extract', keep_snp_name, '--silent',
              '--allow-no-sex'], stderr=FNULL)
 
     except subprocess.CalledProcessError:
@@ -192,7 +193,12 @@ def get_expression_scores(args):
         columns = range(4)
     n_genes = file_len(expmat, args.chr, columns[1])
     gene_num = 0
+
+    # making temporary keep snps file (merging args.keep w/ geno_bfile .bim)
     keep_snps = pd.read_csv(args.keep, header=None)
+    keep_snps_geno = pd.read_csv(args.geno_bfile + '.bim', header=None, delim_whitespace=True)
+    keep_snps = keep_snps[keep_snps[0].isin(keep_snps_geno[1])]
+    keep_snps.to_csv(args.tmp + '/keep_snps_temp.txt', header=False, index=False)
 
     print('Analyzing chromosome {}'.format(args.chr))
     all_lasso = []
