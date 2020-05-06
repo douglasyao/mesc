@@ -12,6 +12,8 @@ import subprocess
 import ldscore as ld
 import parse as ps
 import sys
+import gzip
+import bz2
 
 class Suppressor(object):
     '''
@@ -47,7 +49,16 @@ def file_len(fname, input_chr, chr_idx):
     Get number of genes in gene expression file on input chromosome
     '''
     count = 0
-    with open(fname) as f:
+
+    # check compression
+    if fname.endswith("gz"):
+        anyopen = gzip.open
+    elif fname.endswith("bz2"):
+        anyopen = bz2.open
+    else:
+        anyopen = open
+
+    with anyopen(fname) as f:
         for i, l in enumerate(f):
             if i == 0:
                 continue
@@ -195,7 +206,15 @@ def get_expression_scores(args):
     else:
         covar = None
 
-    with open(expmat) as f:
+    # check compression
+    if expmat.endswith("gz"):
+        anyopen = gzip.open
+    elif expmat.endswith("bz2"):
+        anyopen = bz2.open
+    else:
+        anyopen = open
+
+    with anyopen(expmat) as f:
 
         # compute h2cis and estimate LASSO effect sizes for all genes
         for j, line in enumerate(f):
@@ -258,10 +277,8 @@ def get_expression_scores(args):
         array_indivs = ps.PlinkFAMFile(sc_geno_fname + '.fam')
         array_snps = ps.PlinkBIMFile(sc_geno_fname + '.bim')
         keep_snps_indices = np.where((array_snps.df['CHR'] == args.chr).values & array_snps.df['SNP'].isin(keep_snps[0]).values)[0]
-        keep_indiv_indices = np.where(array_indivs.df['IID'].isin(sample_names))[0]
         with Suppressor():
             geno_array = ld.PlinkBEDFile(sc_geno_fname + '.bed', array_indivs.n, array_snps,
-                                         keep_indivs=keep_indiv_indices,
                                          keep_snps=keep_snps_indices)
         # SNP indices as dict for fast merging
         snp_indices = dict(zip(geno_array.df[:, 1].tolist(), range(len(geno_array.df))))
