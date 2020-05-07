@@ -79,7 +79,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
     :return herit_p: h2cis p-value
     :return lasso: eQTL effect size estimates from LASSO
     '''
-    keep_snp_name = args.tmp + '/keep_snps_temp.txt'
+    keep_snp_name = '{}/keep_snps_chr_{}.txt'.format(args.tmp, args.chr)
 
     FNULL = open(os.devnull, 'w')
     pheno_fname = '{}/{}.pheno'.format(args.tmp, gene_name)
@@ -198,7 +198,7 @@ def get_expression_scores(args):
     keep_snps = pd.read_csv(args.keep, header=None)
     keep_snps_geno = pd.read_csv(args.geno_bfile + '.bim', header=None, delim_whitespace=True)
     keep_snps = keep_snps[keep_snps[0].isin(keep_snps_geno[1])]
-    keep_snps.to_csv(args.tmp + '/keep_snps_temp.txt', header=False, index=False)
+    keep_snps.to_csv('{}/keep_snps_chr_{}.txt'.format(args.tmp, args.chr), header=False, index=False)
 
     print('Analyzing chromosome {}'.format(args.chr))
     all_lasso = []
@@ -233,7 +233,6 @@ def get_expression_scores(args):
             try:
                 chr = int(line[columns[1]])
             except:
-                print('Skipping; chromosome number "{}" is not numeric. Make sure chromosome numbers are just numbers'.format(line[columns[1]]))
                 continue
             if chr != args.chr:
                 continue
@@ -264,6 +263,9 @@ def get_expression_scores(args):
 
     if len(all_lasso) == 0:
         raise ValueError('No weights estimated; something is wrong with input data.')
+
+    # remove keep snps file
+    subprocess.Popen('rm {}/keep_snps_chr_{}.txt'.format(args.tmp, args.chr), shell=True)
 
     # output h2cis estimates
     all_herit = pd.DataFrame.from_records(all_herit, columns=['Gene', 'Chrom', 'h2cis', 'h2cis_se', 'h2cis_p'])
