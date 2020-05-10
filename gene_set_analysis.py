@@ -14,13 +14,13 @@ import sys
 import copy
 import subprocess
 
-N_CHR=2
+N_CHR=22
 dirname = os.path.dirname(__file__)
 pd.set_option('display.max_rows',10)
 
 class Suppressor(object):
     '''
-    Suppresses output from subprocess
+    Suppresses output
     '''
     def __enter__(self):
         self.stdout = sys.stdout
@@ -366,7 +366,6 @@ def create_gset_expscore_meta(args):
                     float_format='%.5f')
     print('Done!')
 
-##### CHANGE N_CHR BACK TO 22 BEFORE COMMITTING ######################################################
 def create_gset_expscore_meta_batch(args):
     '''
     Create gene set expression scores meta-analyzed over several tissues/conditions. Analyze gene sets in batches.
@@ -641,7 +640,7 @@ parser.add_argument('--bfile', default=None, type=str,
 parser.add_argument('--chr', default=None, type=int,
                     help='Chromosome number.')
 parser.add_argument('--keep', default=os.path.join(dirname, 'data/hm3_snps.txt'), type=str,
-                    help='File with SNPs to include in expression score estimation. '
+                    help='File with SNPs to include in expression score estimation. By default will keep Hapmap3 SNPs.'
                          'The file should contain one SNP ID per row.')
 parser.add_argument('--num-gene-bins', default=3, type=int,
                     help='Number of bins to split each gene set into. Default 3.')
