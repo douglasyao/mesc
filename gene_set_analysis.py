@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Compute expression scores for gene sets. Expression scores can be meta-analyzed over multiple tissues/conditions or not.
 '''

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Meta-analyze LASSO-predicted eQTL weights across multiple tissues/conditions.
 Takes a commma separated list of file prefixes for .lasso and .hsq files and PLINK bed file, outputs .expscore, .G,

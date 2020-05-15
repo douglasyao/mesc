@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Given list of gene sets, compute SNP annotation corresponding to x kb window around genes in gene set. Compute LD scores from
 these annotations.
