@@ -146,21 +146,21 @@ def create_window_ldsc_batch(args):
             expscore.to_csv('{}.l2.ldscore.batch{}'.format(args.out, count), sep='\t', index=False, float_format='%.5f')
 
 
-    subprocess.Popen('paste {} > {}'.format(
+    subprocess.call('paste {} > {}'.format(
         ' '.join(['{}.annot.batch{}'.format(args.out, x) for x in range(1, count + 1)]),
         '{}.annot'.format(args.out)), shell=True)
-    subprocess.Popen('paste {} > {}'.format(
+    subprocess.call('paste {} > {}'.format(
         ' '.join(['{}.l2.ldscore.batch{}'.format(args.out, x) for x in range(1, count + 1)]),
         '{}.l2.ldscore'.format(args.out)), shell=True)
-    subprocess.Popen(
+    subprocess.call(
         'rm {}'.format(' '.join(['{}.annot.batch{}'.format(args.out, x) for x in range(1, count + 1)])),
         shell=True)
-    subprocess.Popen(
+    subprocess.call(
         'rm {}'.format(' '.join(['{}.l2.ldscore.batch{}'.format(args.out, x) for x in range(1, count + 1)])),
         shell=True)
 
-    subprocess.Popen('gzip {}.l2.ldscore'.format(args.out), shell=True)
-    subprocess.Popen('gzip {}.annot'.format(args.out), shell=True)
+    subprocess.call('gzip {}.l2.ldscore'.format(args.out), shell=True)
+    subprocess.call('gzip {}.annot'.format(args.out), shell=True)
     np.savetxt('{}.M_5_50'.format(args.out), np.array(M).reshape((1, len(M))), fmt='%d')
 
 

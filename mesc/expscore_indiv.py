@@ -107,7 +107,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
              '--allow-no-sex'], stderr=FNULL)
 
     except subprocess.CalledProcessError:
-        subprocess.Popen('rm {}*'.format(temp_geno_fname), shell=True)
+        subprocess.call('rm {}*'.format(temp_geno_fname), shell=True)
         return 'NO_PLINK'
 
     # make grm (for REML)
@@ -141,7 +141,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
             print('Skipping; REML did not converge')
         elif herit < 0:
             print('Skipping; h2cis < 0')
-        subprocess.Popen('rm {}*'.format(temp_geno_fname), shell=True)
+        subprocess.call('rm {}*'.format(temp_geno_fname), shell=True)
         return (herit, herit_se, herit_p, np.nan)
 
     # estimate causal eQTL effect sizes using LASSO
@@ -158,7 +158,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
         lasso = pd.read_csv('{}.lasso'.format(temp_geno_fname), sep='\t')
     else:
         print('Skipping; LASSO did not converge')
-        subprocess.Popen('rm {}*'.format(temp_geno_fname), shell=True)
+        subprocess.call('rm {}*'.format(temp_geno_fname), shell=True)
         return (herit, herit_se, herit_p, np.nan)
 
     lasso_weights = lasso['EFFECT'].values
@@ -176,7 +176,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
     if lasso.shape[0] == 0:
         lasso = np.nan
     out = (herit, herit_se, herit_p, lasso)
-    subprocess.Popen('rm {}*'.format(temp_geno_fname), shell=True)
+    subprocess.call('rm {}*'.format(temp_geno_fname), shell=True)
     return out
 
 def get_expression_scores(args):
@@ -265,7 +265,7 @@ def get_expression_scores(args):
         raise ValueError('No weights estimated; something is wrong with input data.')
 
     # remove keep snps file
-    subprocess.Popen('rm {}/keep_snps_chr_{}.txt'.format(args.tmp, args.chr), shell=True)
+    subprocess.call('rm {}/keep_snps_chr_{}.txt'.format(args.tmp, args.chr), shell=True)
 
     # output h2cis estimates
     all_herit = pd.DataFrame.from_records(all_herit, columns=['Gene', 'Chrom', 'h2cis', 'h2cis_se', 'h2cis_p'])

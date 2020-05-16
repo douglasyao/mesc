@@ -505,15 +505,15 @@ def create_gset_expscore_meta_batch(args):
         g_annot_final.iloc[:,1:].to_csv(temp_g_annot_name, sep='\t', index=False)
         expscore.iloc[:,3:].to_csv(temp_expscore_name, sep='\t', index=False, float_format='%.5f')
 
-    subprocess.Popen('paste {} > {}'.format(' '.join(['{}.{}.gannot.batch{}'.format(args.out, args.chr, x) for x in range(count+1)]),
+    subprocess.call('paste {} > {}'.format(' '.join(['{}.{}.gannot.batch{}'.format(args.out, args.chr, x) for x in range(count+1)]),
                                             '{}.{}.gannot'.format(args.out, args.chr)), shell=True)
-    subprocess.Popen('paste {} > {}'.format(' '.join(['{}.{}.expscore.batch{}'.format(args.out, args.chr, x) for x in range(count+1)]),
+    subprocess.call('paste {} > {}'.format(' '.join(['{}.{}.expscore.batch{}'.format(args.out, args.chr, x) for x in range(count+1)]),
                                             '{}.{}.expscore'.format(args.out, args.chr)), shell=True)
-    subprocess.Popen('rm {}'.format(' '.join(['{}.{}.gannot.batch{}'.format(args.out, args.chr, x) for x in range(count+1)])), shell=True)
-    subprocess.Popen('rm {}'.format(' '.join(['{}.{}.expscore.batch{}'.format(args.out, args.chr, x) for x in range(count+1)])), shell=True)
+    subprocess.call('rm {}'.format(' '.join(['{}.{}.gannot.batch{}'.format(args.out, args.chr, x) for x in range(count+1)])), shell=True)
+    subprocess.call('rm {}'.format(' '.join(['{}.{}.expscore.batch{}'.format(args.out, args.chr, x) for x in range(count+1)])), shell=True)
 
-    subprocess.Popen('gzip {}'.format('{}.{}.gannot'.format(args.out, args.chr)), shell=True)
-    subprocess.Popen('gzip {}'.format('{}.{}.expscore'.format(args.out, args.chr)), shell=True)
+    subprocess.call('gzip {}'.format('{}.{}.gannot'.format(args.out, args.chr)), shell=True)
+    subprocess.call('gzip {}'.format('{}.{}.expscore'.format(args.out, args.chr)), shell=True)
 
     np.savetxt('{}.{}.G'.format(args.out, args.chr), np.array(all_G).reshape((1, len(all_G))), fmt='%d')
     np.savetxt('{}.{}.ave_h2cis'.format(args.out, args.chr), np.array(all_ave_h2cis).reshape((1, len(all_ave_h2cis))),
