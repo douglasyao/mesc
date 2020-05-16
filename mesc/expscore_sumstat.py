@@ -248,10 +248,10 @@ def get_expression_scores(args):
                            np.array(ave_cis_herit).reshape((1, len(ave_cis_herit))),
                            fmt="%.5f")
 
-                expscore = pd.DataFrame(np.c_[snps.values, eqtl_annot])
+                expscore = pd.concat([
+                    pd.DataFrame(snps.values),
+                    pd.DataFrame(eqtl_annot)], axis=1)
                 expscore.columns = snps.columns.tolist() + g_bin_names
-                for name in g_bin_names:
-                    expscore[name] = expscore[name].astype(float)
                 expscore.to_csv('{}.{}.expscore.gz'.format(args.out, prev_chr), sep='\t', index=False, compression='gzip', float_format='%.5f')
 
                 all_herit.to_csv('{}.{}.hsq'.format(args.out, prev_chr), sep='\t', index=False, float_format='%.5f')

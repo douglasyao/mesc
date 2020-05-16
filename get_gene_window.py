@@ -107,13 +107,15 @@ def create_window_ldsc_batch(args):
     M = []
 
     # create gene window annot file
+    count = 0
     for i in range(0, len(gsets), args.batch_size):
+        count += 1
         print('Computing LD scores for gene sets {} to {} (out of {} total)'.format(i+1, min(i+args.batch_size, len(gsets)), len(gsets)))
         temp_gsets = OrderedDict(gsets.items()[i:(i+args.batch_size)])
         new_bim = pd.DataFrame()
         for gset, genes in temp_gsets.items():
             temp_genes = [x for x in genes if x in gene_coords.iloc[:, 2].tolist()]
-            toadd_annot = np.zeros(len(bim))
+            toadd_annot = np.zeros(len(bim), dtype=int)
             for gene in temp_genes:
                 coord = gene_coords[gene_coords.iloc[:, 2] == gene]
                 try:
@@ -132,24 +134,30 @@ def create_window_ldsc_batch(args):
 
         if i == 0:
             new_bim = pd.concat([bim, new_bim], axis=1)
-            new_bim.to_csv('{}.annot'.format(args.out), sep='\t', index=False)
-            expscore = pd.DataFrame(np.c_[geno_array.df[:, :3], res])
+            new_bim.to_csv('{}.annot.batch{}'.format(args.out, count), sep='\t', index=False)
+            expscore = pd.concat([
+                pd.DataFrame(geno_array.df[:, :3]),
+                pd.DataFrame(res)], axis=1)
             expscore.columns = geno_array.colnames[:3] + new_bim.columns[4:].tolist()
-            expscore.to_csv('{}.l2.ldscore'.format(args.out), sep='\t', index=False, float_format='%.5f')
+            expscore.to_csv('{}.l2.ldscore.batch{}'.format(args.out, count), sep='\t', index=False, float_format='%.5f')
         else:
-            new_bim.to_csv('{}.annot.temp'.format(args.out), sep='\t', index=False)
+            new_bim.to_csv('{}.annot.batch{}'.format(args.out, count), sep='\t', index=False)
             expscore = pd.DataFrame(res, columns=new_bim.columns)
-            expscore.to_csv('{}.ldscore.temp'.format(args.out), sep='\t', index=False, float_format='%.5f')
+            expscore.to_csv('{}.l2.ldscore.batch{}'.format(args.out, count), sep='\t', index=False, float_format='%.5f')
 
-            subprocess.Popen('paste {0}.annot {0}.annot.temp > {0}.annot.temp2'.format(args.out),
-                             shell=True)
-            subprocess.Popen('mv {0}.annot.temp2 {0}.annot'.format(args.out), shell=True)
-            subprocess.Popen('rm {}.annot.temp'.format(args.out), shell=True)
 
-            subprocess.Popen('paste {0}.l2.ldscore {0}.ldscore.temp > {0}.ldscore.temp2'.format(args.out),
-                             shell=True)
-            subprocess.Popen('mv {0}.ldscore.temp2 {0}.l2.ldscore'.format(args.out), shell=True)
-            subprocess.Popen('rm {}.ldscore.temp'.format(args.out), shell=True)
+    subprocess.Popen('paste {} > {}'.format(
+        ' '.join(['{}.annot.batch{}'.format(args.out, x) for x in range(1, count + 1)]),
+        '{}.annot'.format(args.out)), shell=True)
+    subprocess.Popen('paste {} > {}'.format(
+        ' '.join(['{}.l2.ldscore.batch{}'.format(args.out, x) for x in range(1, count + 1)]),
+        '{}.l2.ldscore'.format(args.out)), shell=True)
+    subprocess.Popen(
+        'rm {}'.format(' '.join(['{}.annot.batch{}'.format(args.out, x) for x in range(1, count + 1)])),
+        shell=True)
+    subprocess.Popen(
+        'rm {}'.format(' '.join(['{}.l2.ldscore.batch{}'.format(args.out, x) for x in range(1, count + 1)])),
+        shell=True)
 
     subprocess.Popen('gzip {}.l2.ldscore'.format(args.out), shell=True)
     subprocess.Popen('gzip {}.annot'.format(args.out), shell=True)
@@ -173,7 +181,7 @@ parser.add_argument('--keep', default=os.path.join(dirname, 'data/hm3_snps.txt')
                          'The file should contain one SNP ID per row.')
 parser.add_argument('--out', default=None, type=str,
                     help='Output prefix')
-parser.add_argument('--batch-size', default=None, type=str,
+parser.add_argument('--batch-size', default=None, type=int,
                     help='Analyze gene sets in batches of input size x. Useful to save memory if many gene sets are present.')
 
 if __name__ == '__main__':

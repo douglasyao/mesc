@@ -155,11 +155,9 @@ def create_gset_expscore(args):
             g_annot.append(g_annot_toadd)
         glist.append(gene)
 
-    g_annot = np.array(g_annot)
+    g_annot = np.array(g_annot).astype(int)
     g_annot_final = pd.DataFrame(np.c_[glist, g_annot])
     g_annot_final.columns = ['Gene'] + gset_names
-    for i in range(1, g_annot_final.shape[1]):
-        g_annot_final.iloc[:,i] = pd.to_numeric(g_annot_final.iloc[:,i]).astype(int)
     g_annot_final.to_csv('{}.{}.gannot.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip')
 
     # output .G and .ave_h2cis files
@@ -182,11 +180,10 @@ def create_gset_expscore(args):
 
     # estimate expression scores
     res = geno_array.ldScoreVarBlocks(block_left, c=50, annot=eqtl_annot)
-    expscore = pd.DataFrame(np.c_[geno_array.df[:, :3], res])
+    expscore = pd.concat([
+        pd.DataFrame(geno_array.df[:, :3]),
+        pd.DataFrame(res)], axis=1)
     expscore.columns = geno_array.colnames[:3] + gset_names
-
-    for name in gset_names:
-        expscore[name] = expscore[name].astype(float)
 
     # output files
     expscore.to_csv('{}.{}.expscore.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip',
@@ -329,11 +326,9 @@ def create_gset_expscore_meta(args):
             g_annot.append(g_annot_toadd)
             g_annot_names.append(gene + '_' + temp_cond)
 
-    g_annot = np.array(g_annot)
+    g_annot = np.array(g_annot).astype(int)
     g_annot_final = pd.DataFrame(np.c_[g_annot_names, g_annot])
     g_annot_final.columns = ['Gene'] + gset_names
-    for i in range(1, g_annot_final.shape[1]):
-        g_annot_final.iloc[:,i] = pd.to_numeric(g_annot_final.iloc[:,i]).astype(int)
     g_annot_final.to_csv('{}.{}.gannot.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip')
 
     # output .G and .ave_h2cis files
@@ -356,11 +351,10 @@ def create_gset_expscore_meta(args):
 
     # estimate expression scores
     res = geno_array.ldScoreVarBlocks(block_left, c=50, annot=eqtl_annot)
-    expscore = pd.DataFrame(np.c_[geno_array.df[:, :3], res])
+    expscore = pd.concat([
+        pd.DataFrame(geno_array.df[:, :3]),
+        pd.DataFrame(res)], axis=1)
     expscore.columns = geno_array.colnames[:3] + gset_names
-
-    for name in gset_names:
-        expscore[name] = expscore[name].astype(float)
 
     # output files
     expscore.to_csv('{}.{}.expscore.gz'.format(args.out, args.chr), sep='\t', index=False, compression='gzip',
@@ -462,14 +456,13 @@ def create_gset_expscore_meta_batch(args):
                                                 geno_array, block_left)
     all_G.extend(G)
 
-    g_annot_name = '{}.{}.gannot'.format(args.out, args.chr)
-    expscore_name = '{}.{}.expscore'.format(args.out, args.chr)
-
-    g_annot_final.to_csv(g_annot_name, sep='\t', index=False)
-    expscore.to_csv(expscore_name, sep='\t', index=False, float_format='%.5f')
+    g_annot_final.to_csv('{}.{}.gannot.batch0'.format(args.out, args.chr), sep='\t', index=False)
+    expscore.to_csv('{}.{}.expscore.batch0'.format(args.out, args.chr), sep='\t', index=False, float_format='%.5f')
 
     # remaining gene sets
+    count = 0
     for i in range(0, len(gsets), args.batch_size):
+        count += 1
         print('Computing expression scores for gene sets {} to {} (out of {} total)'.format(i+1, min(i+args.batch_size, len(gsets)), len(gsets)))
         temp_gsets = OrderedDict(gsets.items()[i:(i+args.batch_size)])
         rest_gset_names = []
@@ -506,21 +499,21 @@ def create_gset_expscore_meta_batch(args):
         G, g_annot_final, expscore = batch_expscore(rest_gene_gset_dict, rest_gset_names, chr_filtered_h2cis, all_lasso, bim,
                                                     snp_indices, gset_indices, geno_array, block_left)
         all_G.extend(G)
-        temp_g_annot_name = '{}.{}.temp.gannot'.format(args.out, args.chr)
-        temp_expscore_name = '{}.{}.temp.expscore'.format(args.out, args.chr)
+        temp_g_annot_name = '{}.{}.gannot.batch{}'.format(args.out, args.chr, count)
+        temp_expscore_name = '{}.{}.expscore.batch{}'.format(args.out, args.chr, count)
 
         g_annot_final.iloc[:,1:].to_csv(temp_g_annot_name, sep='\t', index=False)
         expscore.iloc[:,3:].to_csv(temp_expscore_name, sep='\t', index=False, float_format='%.5f')
-        subprocess.Popen('paste {} {} > {}.temp'.format(g_annot_name, temp_g_annot_name, temp_g_annot_name), shell=True)
-        subprocess.Popen('mv {}.temp {}'.format(temp_g_annot_name, g_annot_name), shell=True)
-        subprocess.Popen('rm {}'.format(temp_g_annot_name), shell=True)
 
-        subprocess.Popen('paste {} {} > {}.temp'.format(expscore_name, temp_expscore_name, temp_expscore_name), shell=True)
-        subprocess.Popen('mv {}.temp {}'.format(temp_expscore_name, expscore_name), shell=True)
-        subprocess.Popen('rm {}'.format(temp_expscore_name), shell=True)
+    subprocess.Popen('paste {} > {}'.format(' '.join(['{}.{}.gannot.batch{}'.format(args.out, args.chr, x) for x in range(count+1)]),
+                                            '{}.{}.gannot'.format(args.out, args.chr)), shell=True)
+    subprocess.Popen('paste {} > {}'.format(' '.join(['{}.{}.expscore.batch{}'.format(args.out, args.chr, x) for x in range(count+1)]),
+                                            '{}.{}.expscore'.format(args.out, args.chr)), shell=True)
+    subprocess.Popen('rm {}'.format(' '.join(['{}.{}.gannot.batch{}'.format(args.out, args.chr, x) for x in range(count+1)])), shell=True)
+    subprocess.Popen('rm {}'.format(' '.join(['{}.{}.expscore.batch{}'.format(args.out, args.chr, x) for x in range(count+1)])), shell=True)
 
-    subprocess.Popen('gzip {}'.format(g_annot_name), shell=True)
-    subprocess.Popen('gzip {}'.format(expscore_name), shell=True)
+    subprocess.Popen('gzip {}'.format('{}.{}.gannot'.format(args.out, args.chr)), shell=True)
+    subprocess.Popen('gzip {}'.format('{}.{}.expscore'.format(args.out, args.chr)), shell=True)
 
     np.savetxt('{}.{}.G'.format(args.out, args.chr), np.array(all_G).reshape((1, len(all_G))), fmt='%d')
     np.savetxt('{}.{}.ave_h2cis'.format(args.out, args.chr), np.array(all_ave_h2cis).reshape((1, len(all_ave_h2cis))),
@@ -565,21 +558,18 @@ def batch_expscore(gene_gset_dict, gset_names, filtered_h2cis, all_lasso, bim, s
             g_annot.append(g_annot_toadd)
             g_annot_names.append(gene + '_' + temp_cond)
 
-    g_annot = np.array(g_annot)
+    g_annot = np.array(g_annot).astype(int)
     g_annot_final = pd.DataFrame(np.c_[g_annot_names, g_annot])
     g_annot_final.columns = ['Gene'] + gset_names
-    for i in range(1, g_annot_final.shape[1]):
-        g_annot_final.iloc[:, i] = pd.to_numeric(g_annot_final.iloc[:, i]).astype(int)
     G = np.sum(g_annot, axis=0)
 
     # estimate expression scores
     res = geno_array.ldScoreVarBlocks(block_left, c=50, annot=eqtl_annot)
     geno_array._currentSNP = 0
-    expscore = pd.DataFrame(np.c_[geno_array.df[:, :3], res])
+    expscore = pd.concat([
+        pd.DataFrame(geno_array.df[:, :3]),
+        pd.DataFrame(res)], axis=1)
     expscore.columns = geno_array.colnames[:3] + gset_names
-
-    for name in gset_names:
-        expscore[name] = expscore[name].astype(float)
 
     # output files
     return(G, g_annot_final, expscore)
