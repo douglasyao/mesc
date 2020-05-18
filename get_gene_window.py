@@ -207,7 +207,7 @@ parser.add_argument('--batch-size', default=None, type=int,
                     help='Analyze gene sets in batches of input size x. Useful to save memory if many gene sets are present.')
 parser.add_argument('--transpose', default=False, action='store_true',
                     help='Transpose output .l2.ldscore and .annot matrices.')
-parser.add_argument('--gzip', default=True, action='store_true',
+parser.add_argument('--gzip', default=False, action='store_true',
                     help='Gzip output .l2.ldscore and .annot files')
 
 if __name__ == '__main__':

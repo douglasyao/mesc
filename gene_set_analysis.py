@@ -668,7 +668,7 @@ parser.add_argument('--batch-size', default=None, type=int,
                     help='Analyze gene sets in batches of input size x. Useful to save memory if many gene sets are present.')
 parser.add_argument('--transpose', default=False, action='store_true',
                     help='Transpose output .expscore and .gannot matrices.')
-parser.add_argument('--gzip', default=True, action='store_true',
+parser.add_argument('--gzip', default=False, action='store_true',
                     help='Gzip output .expscore and .gannot files')
 
 if __name__ == '__main__':
