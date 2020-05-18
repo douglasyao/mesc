@@ -427,7 +427,6 @@ def create_gset_expscore_meta_batch(args):
 
     block_left = ld.getBlockLefts(geno_array.df[:, 2], 1e6)
 
-
     print('Computing expression scores for background gene sets')
     # analyze background gset
     gset_names = ['Cis_herit_bin_{}'.format(x) for x in range(1, args.num_background_bins + 1)]
@@ -456,8 +455,14 @@ def create_gset_expscore_meta_batch(args):
                                                 geno_array, block_left)
     all_G.extend(G)
 
-    g_annot_final.to_csv('{}.{}.gannot.batch0'.format(args.out, args.chr), sep='\t', index=False)
-    expscore.to_csv('{}.{}.expscore.batch0'.format(args.out, args.chr), sep='\t', index=False, float_format='%.5f')
+    if args.transpose:
+        g_annot_final = g_annot_final.T
+        expscore = expscore.T
+        g_annot_final.to_csv('{}.{}.gannot.batch0'.format(args.out, args.chr), sep='\t', header=False)
+        expscore.to_csv('{}.{}.expscore.batch0'.format(args.out, args.chr), sep='\t', header=False, float_format='%.5f')
+    else:
+        g_annot_final.to_csv('{}.{}.gannot.batch0'.format(args.out, args.chr), sep='\t', index=False)
+        expscore.to_csv('{}.{}.expscore.batch0'.format(args.out, args.chr), sep='\t', index=False, float_format='%.5f')
 
     # remaining gene sets
     count = 0
@@ -502,18 +507,33 @@ def create_gset_expscore_meta_batch(args):
         temp_g_annot_name = '{}.{}.gannot.batch{}'.format(args.out, args.chr, count)
         temp_expscore_name = '{}.{}.expscore.batch{}'.format(args.out, args.chr, count)
 
-        g_annot_final.iloc[:,1:].to_csv(temp_g_annot_name, sep='\t', index=False)
-        expscore.iloc[:,3:].to_csv(temp_expscore_name, sep='\t', index=False, float_format='%.5f')
+        if args.transpose:
+            g_annot_final = g_annot_final.iloc[:,1:].T
+            expscore = expscore.iloc[:, 3:].T
+            g_annot_final.to_csv(temp_g_annot_name, sep='\t', header=False)
+            expscore.to_csv(temp_expscore_name, sep='\t', header=False, float_format='%.5f')
+        else:
+            g_annot_final = g_annot_final.iloc[:, 1:]
+            expscore = expscore.iloc[:, 3:]
+            g_annot_final.to_csv(temp_g_annot_name, sep='\t', index=False)
+            expscore.to_csv(temp_expscore_name, sep='\t', index=False, float_format='%.5f')
 
-    subprocess.call('paste {} > {}'.format(' '.join(['{}.{}.gannot.batch{}'.format(args.out, args.chr, x) for x in range(count+1)]),
+
+    if args.transpose:
+        paste_command = 'cat'
+    else:
+        paste_command = 'paste'
+
+    subprocess.call('{} {} > {}'.format(paste_command, ' '.join(['{}.{}.gannot.batch{}'.format(args.out, args.chr, x) for x in range(count+1)]),
                                             '{}.{}.gannot'.format(args.out, args.chr)), shell=True)
-    subprocess.call('paste {} > {}'.format(' '.join(['{}.{}.expscore.batch{}'.format(args.out, args.chr, x) for x in range(count+1)]),
+    subprocess.call('{} {} > {}'.format(paste_command, ' '.join(['{}.{}.expscore.batch{}'.format(args.out, args.chr, x) for x in range(count+1)]),
                                             '{}.{}.expscore'.format(args.out, args.chr)), shell=True)
     subprocess.call('rm {}'.format(' '.join(['{}.{}.gannot.batch{}'.format(args.out, args.chr, x) for x in range(count+1)])), shell=True)
     subprocess.call('rm {}'.format(' '.join(['{}.{}.expscore.batch{}'.format(args.out, args.chr, x) for x in range(count+1)])), shell=True)
 
-    subprocess.call('gzip {}'.format('{}.{}.gannot'.format(args.out, args.chr)), shell=True)
-    subprocess.call('gzip {}'.format('{}.{}.expscore'.format(args.out, args.chr)), shell=True)
+    if args.gzip:
+        subprocess.call('gzip {}'.format('{}.{}.gannot'.format(args.out, args.chr)), shell=True)
+        subprocess.call('gzip {}'.format('{}.{}.expscore'.format(args.out, args.chr)), shell=True)
 
     np.savetxt('{}.{}.G'.format(args.out, args.chr), np.array(all_G).reshape((1, len(all_G))), fmt='%d')
     np.savetxt('{}.{}.ave_h2cis'.format(args.out, args.chr), np.array(all_ave_h2cis).reshape((1, len(all_ave_h2cis))),
@@ -642,6 +662,10 @@ parser.add_argument('--genes', default=None, type=str,
                          'relative to background set of genes. One name per line')
 parser.add_argument('--batch-size', default=None, type=int,
                     help='Analyze gene sets in batches of input size x. Useful to save memory if many gene sets are present.')
+parser.add_argument('--transpose', default=False, action='store_true',
+                    help='Transpose output .expscore and .gannot matrices.')
+parser.add_argument('--gzip', default=True, action='store_true',
+                    help='Gzip output .expscore and .gannot files')
 
 if __name__ == '__main__':
 
