@@ -134,22 +134,42 @@ def create_window_ldsc_batch(args):
 
         if i == 0:
             new_bim = pd.concat([bim, new_bim], axis=1)
-            new_bim.to_csv('{}.annot.batch{}'.format(args.out, count), sep='\t', index=False)
             expscore = pd.concat([
                 pd.DataFrame(geno_array.df[:, :3]),
                 pd.DataFrame(res)], axis=1)
             expscore.columns = geno_array.colnames[:3] + new_bim.columns[4:].tolist()
-            expscore.to_csv('{}.l2.ldscore.batch{}'.format(args.out, count), sep='\t', index=False, float_format='%.5f')
+            if args.transpose:
+                new_bim = new_bim.T
+                expscore = expscore.round(5)
+                expscore = expscore.T
+                new_bim.to_csv('{}.annot.batch{}'.format(args.out, count), sep='\t', header=False)
+                expscore.to_csv('{}.l2.ldscore.batch{}'.format(args.out, count), sep='\t', header=False,
+                                float_format='%.5f')
+            else:
+                new_bim.to_csv('{}.annot.batch{}'.format(args.out, count), sep='\t', index=False)
+                expscore.to_csv('{}.l2.ldscore.batch{}'.format(args.out, count), sep='\t', index=False, float_format='%.5f')
         else:
-            new_bim.to_csv('{}.annot.batch{}'.format(args.out, count), sep='\t', index=False)
             expscore = pd.DataFrame(res, columns=new_bim.columns)
-            expscore.to_csv('{}.l2.ldscore.batch{}'.format(args.out, count), sep='\t', index=False, float_format='%.5f')
+            if args.transpose:
+                new_bim = new_bim.T
+                expscore = expscore.round(5)
+                expscore = expscore.T
+                new_bim.to_csv('{}.annot.batch{}'.format(args.out, count), sep='\t', header=False)
+                expscore.to_csv('{}.l2.ldscore.batch{}'.format(args.out, count), sep='\t', header=False,
+                                float_format='%.5f')
+            else:
+                new_bim.to_csv('{}.annot.batch{}'.format(args.out, count), sep='\t', index=False)
+                expscore.to_csv('{}.l2.ldscore.batch{}'.format(args.out, count), sep='\t', index=False, float_format='%.5f')
 
+    if args.transpose:
+        paste_command = 'cat'
+    else:
+        paste_command = 'paste'
 
-    subprocess.call('paste {} > {}'.format(
+    subprocess.call('{} {} > {}'.format(paste_command,
         ' '.join(['{}.annot.batch{}'.format(args.out, x) for x in range(1, count + 1)]),
         '{}.annot'.format(args.out)), shell=True)
-    subprocess.call('paste {} > {}'.format(
+    subprocess.call('{} {} > {}'.format(paste_command,
         ' '.join(['{}.l2.ldscore.batch{}'.format(args.out, x) for x in range(1, count + 1)]),
         '{}.l2.ldscore'.format(args.out)), shell=True)
     subprocess.call(
@@ -159,8 +179,10 @@ def create_window_ldsc_batch(args):
         'rm {}'.format(' '.join(['{}.l2.ldscore.batch{}'.format(args.out, x) for x in range(1, count + 1)])),
         shell=True)
 
-    subprocess.call('gzip {}.l2.ldscore'.format(args.out), shell=True)
-    subprocess.call('gzip {}.annot'.format(args.out), shell=True)
+    if args.gzip:
+        subprocess.call('gzip {}.l2.ldscore'.format(args.out), shell=True)
+        subprocess.call('gzip {}.annot'.format(args.out), shell=True)
+
     np.savetxt('{}.M_5_50'.format(args.out), np.array(M).reshape((1, len(M))), fmt='%d')
 
 
@@ -183,6 +205,10 @@ parser.add_argument('--out', default=None, type=str,
                     help='Output prefix')
 parser.add_argument('--batch-size', default=None, type=int,
                     help='Analyze gene sets in batches of input size x. Useful to save memory if many gene sets are present.')
+parser.add_argument('--transpose', default=False, action='store_true',
+                    help='Transpose output .l2.ldscore and .annot matrices.')
+parser.add_argument('--gzip', default=True, action='store_true',
+                    help='Gzip output .l2.ldscore and .annot files')
 
 if __name__ == '__main__':
 

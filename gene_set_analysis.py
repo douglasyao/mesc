@@ -18,6 +18,8 @@ import subprocess
 N_CHR=22
 dirname = os.path.dirname(__file__)
 pd.set_option('display.max_rows',10)
+pd.set_option('display.max_columns',10)
+
 
 class Suppressor(object):
     '''
@@ -457,6 +459,7 @@ def create_gset_expscore_meta_batch(args):
 
     if args.transpose:
         g_annot_final = g_annot_final.T
+        expscore = expscore.round(5)
         expscore = expscore.T
         g_annot_final.to_csv('{}.{}.gannot.batch0'.format(args.out, args.chr), sep='\t', header=False)
         expscore.to_csv('{}.{}.expscore.batch0'.format(args.out, args.chr), sep='\t', header=False, float_format='%.5f')
@@ -509,6 +512,7 @@ def create_gset_expscore_meta_batch(args):
 
         if args.transpose:
             g_annot_final = g_annot_final.iloc[:,1:].T
+            expscore = expscore.round(5)
             expscore = expscore.iloc[:, 3:].T
             g_annot_final.to_csv(temp_g_annot_name, sep='\t', header=False)
             expscore.to_csv(temp_expscore_name, sep='\t', header=False, float_format='%.5f')
