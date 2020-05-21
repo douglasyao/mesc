@@ -145,7 +145,7 @@ def create_window_ldsc_batch(args):
         M.extend(temp_M)
 
         if args.split_output:
-            new_bim = pd.concat([bim, new_bim], axis=1)
+            new_bim = pd.concat([bim.reset_index(drop=True), new_bim.reset_index(drop=True)], axis=1)
             expscore = pd.concat([
                 pd.DataFrame(geno_array.df[:, :3]),
                 pd.DataFrame(res)], axis=1)
@@ -160,7 +160,7 @@ def create_window_ldsc_batch(args):
 
         else:
             if i == 0:
-                new_bim = pd.concat([bim, new_bim], axis=1)
+                new_bim = pd.concat([bim.reset_index(drop=True), new_bim.reset_index(drop=True)], axis=1)
                 expscore = pd.concat([
                     pd.DataFrame(geno_array.df[:, :3]),
                     pd.DataFrame(res)], axis=1)
