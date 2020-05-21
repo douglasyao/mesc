@@ -1,8 +1,8 @@
 # Mediated Expression Score Regression (MESC)
 
-MESC is a tool for estimating heritability mediated by assayed gene expression levels. See preprint here: 
+MESC is a tool for estimating heritability mediated by assayed gene expression levels. See paper here: 
 
-[Douglas Yao, Luke O'Connor, Alkes Price, Alexander Gusev. Quantifying genetic effects on disease mediated by assayed gene expression levels. BioRxiv.](https://www.biorxiv.org/content/10.1101/730549v1)
+[Douglas Yao, Luke O'Connor, Alkes Price, Alexander Gusev. Quantifying genetic effects on disease mediated by assayed gene expression levels. Nature Genetics, 2020.](https://www.nature.com/articles/s41588-020-0625-2)
 
 To use, clone the repository: 
 ```
@@ -10,4 +10,4 @@ git clone https://github.com/douglasyao/mesc.git
 cd mesc
 ```
 
-See the [wiki](https://github.com/douglasyao/mesc/wiki) page for documentation. For comments and feedback, please contact douglasyao@g.harvard.edu.
+See the [wiki](https://github.com/douglasyao/mesc/wiki) page for documentation. For comments and questions, please contact douglasyao@g.harvard.edu.
