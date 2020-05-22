@@ -16,7 +16,7 @@ import copy
 import subprocess
 import re
 
-N_CHR=2
+N_CHR=22
 dirname = os.path.dirname(__file__)
 pd.set_option('display.max_rows',10)
 pd.set_option('display.max_columns',10)
@@ -518,6 +518,7 @@ def create_gset_expscore_meta_batch(args):
 
     # remaining gene sets
     count = 0
+    ave_h2cis = []
     for i in range(0, len(gsets), args.batch_size):
         count += 1
         print('Computing expression scores for gene sets {} to {} (out of {} total)'.format(i+1, min(i+args.batch_size, len(gsets)), len(gsets)))
@@ -549,20 +550,21 @@ def create_gset_expscore_meta_batch(args):
                     copy_herit = copy_herit.append([['GENE', 0, 0, i]])
             temp_h2cis = copy_herit[[2, 3]].groupby([3]).mean()
             temp_h2cis = temp_h2cis[2].values
-            all_ave_h2cis.extend(temp_h2cis)
+            ave_h2cis.extend(temp_h2cis)
             for i, gene in enumerate(temp_combined_herit[0].values):
                 rest_gene_gset_dict[gene].append('{}_Cis_herit_bin_{}'.format(k, temp_combined_herit[3].values[i] + 1))
 
         G, g_annot_final, expscore = batch_expscore(rest_gene_gset_dict, rest_gset_names, chr_filtered_h2cis, all_lasso, bim,
                                                     snp_indices, gset_indices, geno_array, block_left)
         all_G.extend(G)
+        all_ave_h2cis.extend(ave_h2cis)
         if args.split_output:
             for i in range(0, len(temp_gsets) * args.num_gene_bins, args.num_gene_bins):
                 gset_name = re.sub('_Cis_herit_bin_1', '', g_annot_final.columns[1 + i])
                 np.savetxt('{}.{}.{}.G'.format(args.out, gset_name, args.chr),
                            G[i:i + args.num_gene_bins].reshape((1, args.num_gene_bins)), fmt='%d')
                 np.savetxt('{}.{}.{}.ave_h2cis'.format(args.out, gset_name, args.chr),
-                           np.array(all_ave_h2cis[i:i + args.num_gene_bins]).reshape((1, args.num_gene_bins)),
+                           np.array(ave_h2cis[i:i + args.num_gene_bins]).reshape((1, args.num_gene_bins)),
                            fmt="%.5f")
                 g_annot_final.iloc[:, [0] + range(i + 1, i + 1 + args.num_gene_bins)].to_csv(
                     '{}.{}.{}.gannot'.format(args.out, gset_name, args.chr),
