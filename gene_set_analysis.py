@@ -16,7 +16,7 @@ import copy
 import subprocess
 import re
 
-N_CHR=22
+N_CHR=2
 dirname = os.path.dirname(__file__)
 pd.set_option('display.max_rows',10)
 pd.set_option('display.max_columns',10)
@@ -53,7 +53,7 @@ def create_gset_expscore(args):
     Create gene set expression scores
     '''
     input_prefix = '{}.{}'.format(args.input_prefix, args.chr)
-    gsets = read_gene_sets(args.gene_sets)
+    gsets = read_gene_sets(args.gene_sets, args.gset_start, args.gset_end)
 
     print('Reading eQTL weights')
     h2cis = pd.DataFrame()
@@ -226,7 +226,7 @@ def create_gset_expscore_meta(args):
     '''
     input_prefixes = read_file_line(args.input_prefix_meta)
     genes = get_gene_list(input_prefixes)
-    gsets = read_gene_sets(args.gene_sets)
+    gsets = read_gene_sets(args.gene_sets, args.gset_start, args.gset_end)
 
     # gene indices for fast merging
     gene_indices = dict(zip(genes['Gene'].tolist(), range(len(genes))))
@@ -417,7 +417,7 @@ def create_gset_expscore_meta_batch(args):
     '''
     input_prefixes = read_file_line(args.input_prefix_meta)
     genes = get_gene_list(input_prefixes)
-    gsets = read_gene_sets(args.gene_sets)
+    gsets = read_gene_sets(args.gene_sets, args.gset_start, args.gset_end)
 
     # gene indices for fast merging
     gene_indices = dict(zip(genes['Gene'].tolist(), range(len(genes))))
@@ -648,7 +648,7 @@ def batch_expscore(gene_gset_dict, gset_names, filtered_h2cis, all_lasso, bim, s
     return(G, g_annot_final, expscore)
 
 
-def read_gene_sets(fname):
+def read_gene_sets(fname, start=None, end=None):
     '''
     Read gene sets from file.
     '''
@@ -657,6 +657,12 @@ def read_gene_sets(fname):
         for line in f:
             line = line.strip().split()
             gsets[line[0]] = line[1:]
+    if start and end:
+        gsets = OrderedDict(gsets.items()[start - 1:end])
+    elif start:
+        gsets = OrderedDict(gsets.items()[start - 1:])
+    elif end:
+        gsets = OrderedDict(gsets.items()[:end])
     return gsets
 
 def get_gene_list(input_prefixes):
@@ -717,6 +723,11 @@ parser.add_argument('--batch-size', default=None, type=int,
                     help='Analyze gene sets in batches of input size x. Useful to save memory if many gene sets are present.')
 parser.add_argument('--split-output', default=False, action='store_true',
                     help='Output each gene set in its own file.')
+parser.add_argument('--gset-start', default=None, type=int,
+                    help='(Optional) which line to start reading gene sets in gene set file.')
+parser.add_argument('--gset-end', default=None, type=int,
+                    help='(Optional) which line to end reading gene sets in gene set file.')
+
 
 if __name__ == '__main__':
 
