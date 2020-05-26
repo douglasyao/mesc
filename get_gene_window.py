@@ -79,8 +79,8 @@ def create_window_ldsc(args):
     res = res[keep_snps_indices,:]
 
     expscore = pd.concat([
-        pd.DataFrame(bim.iloc[keep_snps_indices, [0,1,3]]),
-        pd.DataFrame(res)], axis=1)
+        bim.iloc[keep_snps_indices, [0,1,3]].reset_index(drop=True),
+        pd.DataFrame(res).reset_index(drop=True)], axis=1)
     expscore.columns = geno_array.colnames[:3] + bim.columns[4:].tolist()
 
     # output files
