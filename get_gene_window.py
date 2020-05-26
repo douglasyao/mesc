@@ -42,10 +42,9 @@ def create_window_ldsc(args):
     gene_coords = pd.read_csv(args.gene_coords, sep='\t')
 
     # read SNPs
-    keep_snps = pd.read_csv(args.keep, header=None)
     geno_fname = args.bfile
     bim = pd.read_csv(geno_fname + '.bim', sep='\t', header=None)  # load bim
-    bim = bim.loc[bim[1].isin(keep_snps[0]).values, 0:3]
+    bim = bim.loc[:, 0:3]
     bim.columns = ['CHR', 'SNP', 'CM', 'BP']
 
     # create gene window annot file
@@ -63,22 +62,24 @@ def create_window_ldsc(args):
             toadd_annot[(bim['CHR'] == chr).values & (bim['BP'] > start).values & (bim['BP'] < end).values] = 1
         bim[gset] = toadd_annot
 
-    M = np.sum(bim.iloc[:,4:].values, axis=0)
-
     # estimate LD scores
     array_indivs = ps.PlinkFAMFile(geno_fname + '.fam')
     array_snps = ps.PlinkBIMFile(geno_fname + '.bim')
-    keep_snps_indices = np.where(array_snps.df['SNP'].isin(keep_snps[0]).values)[0]
 
-    geno_array = ld.PlinkBEDFile(geno_fname + '.bed', array_indivs.n, array_snps,
-                                     keep_snps=keep_snps_indices)
-
+    geno_array = ld.PlinkBEDFile(geno_fname + '.bed', array_indivs.n, array_snps)
     block_left = ld.getBlockLefts(geno_array.df[:, 2], 1e6)
+
+    # compute M
+    M_5_50 = np.sum(bim.iloc[np.array(geno_array.freq) > 0.05, 4:].values, axis=0)
 
     # estimate ld scores
     res = geno_array.ldScoreVarBlocks(block_left, c=50, annot=bim.iloc[:, 4:].values)
+    keep_snps = pd.read_csv(args.keep, header=None)
+    keep_snps_indices = array_snps.df['SNP'].isin(keep_snps[0]).values
+    res = res[keep_snps_indices,:]
+
     expscore = pd.concat([
-        pd.DataFrame(geno_array.df[:, :3]),
+        pd.DataFrame(bim.iloc[keep_snps_indices, [0,1,3]]),
         pd.DataFrame(res)], axis=1)
     expscore.columns = geno_array.colnames[:3] + bim.columns[4:].tolist()
 
@@ -86,114 +87,16 @@ def create_window_ldsc(args):
     if args.split_output:
         for i in range(len(gsets)):
             gset_name = bim.columns[4+i]
-            np.savetxt('{}.{}.M_5_50'.format(args.out, gset_name), M[i].reshape((1, 1)), fmt='%d')
+            np.savetxt('{}.{}.M_5_50'.format(args.out, gset_name), M_5_50[i].reshape((1, 1)), fmt='%d')
             bim.iloc[:, range(4) + [4 + i]].to_csv('{}.{}.annot'.format(args.out, gset_name), sep='\t', index=False)
             expscore.iloc[:, range(3) + [3 + i]].to_csv('{}.{}.l2.ldscore'.format(args.out, gset_name), sep='\t', index=False,
                         float_format='%.5f')
 
     else:
-        np.savetxt('{}.M_5_50'.format(args.out), M.reshape((1, len(M))), fmt='%d')
+        np.savetxt('{}.M_5_50'.format(args.out), M_5_50.reshape((1, len(M_5_50))), fmt='%d')
         bim.to_csv('{}.annot'.format(args.out), sep='\t', index=False)
         expscore.to_csv('{}.l2.ldscore'.format(args.out), sep='\t', index=False,
                         float_format='%.5f')
-
-def create_window_ldsc_batch(args):
-    '''
-    Create SNP annotation corresponding to x kb window around genes in gene sets. Estimate LD scores using these annotations.
-    Analyze in batches of gene sets
-    '''
-    gsets = read_gene_sets(args.gene_sets, args.gset_start, args.gset_end)
-    gene_coords = pd.read_csv(args.gene_coords, sep='\t')
-
-    # read SNPs
-    keep_snps = pd.read_csv(args.keep, header=None)
-    geno_fname = args.bfile
-    bim = pd.read_csv(geno_fname + '.bim', sep='\t', header=None)  # load bim
-    bim = bim.loc[bim[1].isin(keep_snps[0]).values, 0:3]
-    bim.columns = ['CHR', 'SNP', 'CM', 'BP']
-
-    # load genotype
-    array_indivs = ps.PlinkFAMFile(geno_fname + '.fam')
-    array_snps = ps.PlinkBIMFile(geno_fname + '.bim')
-    keep_snps_indices = np.where(array_snps.df['SNP'].isin(keep_snps[0]).values)[0]
-
-    geno_array = ld.PlinkBEDFile(geno_fname + '.bed', array_indivs.n, array_snps,
-                                 keep_snps=keep_snps_indices)
-
-    block_left = ld.getBlockLefts(geno_array.df[:, 2], 1e6)
-    M = []
-
-    # create gene window annot file
-    count = 0
-    for i in range(0, len(gsets), args.batch_size):
-        count += 1
-        print('Computing LD scores for gene sets {} to {} (out of {} total)'.format(i+1, min(i+args.batch_size, len(gsets)), len(gsets)))
-        temp_gsets = OrderedDict(gsets.items()[i:(i+args.batch_size)])
-        new_bim = pd.DataFrame()
-        for gset, genes in temp_gsets.items():
-            temp_genes = [x for x in genes if x in gene_coords.iloc[:, 2].tolist()]
-            toadd_annot = np.zeros(len(bim), dtype=int)
-            for gene in temp_genes:
-                coord = gene_coords[gene_coords.iloc[:, 2] == gene]
-                try:
-                    chr = int(coord.iloc[0, 0])
-                except:
-                    continue
-                start = int(coord.iloc[0, 1]) - 1000 * args.make_kb_window
-                end = int(coord.iloc[0, 1]) + 1000 * args.make_kb_window
-                toadd_annot[(bim['CHR'] == chr).values & (bim['BP'] > start).values & (bim['BP'] < end).values] = 1
-            new_bim[gset] = toadd_annot
-
-        # estimate LD scores
-        res = geno_array.ldScoreVarBlocks(block_left, c=50, annot=new_bim.values)
-        geno_array._currentSNP = 0
-        temp_M = np.sum(new_bim, axis=0)
-        M.extend(temp_M)
-
-        if args.split_output:
-            new_bim = pd.concat([bim.reset_index(drop=True), new_bim.reset_index(drop=True)], axis=1)
-            expscore = pd.concat([
-                pd.DataFrame(geno_array.df[:, :3]),
-                pd.DataFrame(res)], axis=1)
-            expscore.columns = geno_array.colnames[:3] + new_bim.columns[4:].tolist()
-            for i in range(len(temp_gsets)):
-                gset_name = new_bim.columns[4 + i]
-                np.savetxt('{}.{}.M_5_50'.format(args.out, gset_name), temp_M[i].reshape((1, 1)), fmt='%d')
-                new_bim.iloc[:, range(4) + [4 + i]].to_csv('{}.{}.annot'.format(args.out, gset_name), sep='\t', index=False)
-                expscore.iloc[:, range(3) + [3 + i]].to_csv('{}.{}.l2.ldscore'.format(args.out, gset_name), sep='\t',
-                                                            index=False,
-                                                            float_format='%.5f')
-
-        else:
-            if i == 0:
-                new_bim = pd.concat([bim.reset_index(drop=True), new_bim.reset_index(drop=True)], axis=1)
-                expscore = pd.concat([
-                    pd.DataFrame(geno_array.df[:, :3]),
-                    pd.DataFrame(res)], axis=1)
-                expscore.columns = geno_array.colnames[:3] + new_bim.columns[4:].tolist()
-                new_bim.to_csv('{}.annot.batch{}'.format(args.out, count), sep='\t', index=False)
-                expscore.to_csv('{}.l2.ldscore.batch{}'.format(args.out, count), sep='\t', index=False, float_format='%.5f')
-
-            else:
-                expscore = pd.DataFrame(res, columns=new_bim.columns)
-                new_bim.to_csv('{}.annot.batch{}'.format(args.out, count), sep='\t', index=False)
-                expscore.to_csv('{}.l2.ldscore.batch{}'.format(args.out, count), sep='\t', index=False, float_format='%.5f')
-
-    if not args.split_output:
-        subprocess.call('paste {} > {}'.format(
-            ' '.join(['{}.annot.batch{}'.format(args.out, x) for x in range(1, count + 1)]),
-            '{}.annot'.format(args.out)), shell=True)
-        subprocess.call('paste {} > {}'.format(
-            ' '.join(['{}.l2.ldscore.batch{}'.format(args.out, x) for x in range(1, count + 1)]),
-            '{}.l2.ldscore'.format(args.out)), shell=True)
-        subprocess.call(
-            'rm {}'.format(' '.join(['{}.annot.batch{}'.format(args.out, x) for x in range(1, count + 1)])),
-            shell=True)
-        subprocess.call(
-            'rm {}'.format(' '.join(['{}.l2.ldscore.batch{}'.format(args.out, x) for x in range(1, count + 1)])),
-            shell=True)
-
-        np.savetxt('{}.M_5_50'.format(args.out), np.array(M).reshape((1, len(M))), fmt='%d')
 
 
 parser = argparse.ArgumentParser()
