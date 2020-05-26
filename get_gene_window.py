@@ -87,13 +87,13 @@ def create_window_ldsc(args):
     if args.split_output:
         for i in range(len(gsets)):
             gset_name = bim.columns[4+i]
-            np.savetxt('{}.{}.M_5_50'.format(args.out, gset_name), M_5_50[i].reshape((1, 1)), fmt='%d')
+            np.savetxt('{}.{}.l2.M_5_50'.format(args.out, gset_name), M_5_50[i].reshape((1, 1)), fmt='%d')
             bim.iloc[:, range(4) + [4 + i]].to_csv('{}.{}.annot.gz'.format(args.out, gset_name), sep='\t', index=False, compression='gzip')
             expscore.iloc[:, range(3) + [3 + i]].to_csv('{}.{}.l2.ldscore.gz'.format(args.out, gset_name), sep='\t', index=False,
                         float_format='%.5f', compression='gzip')
 
     else:
-        np.savetxt('{}.M_5_50'.format(args.out), M_5_50.reshape((1, len(M_5_50))), fmt='%d')
+        np.savetxt('{}.l2.M_5_50'.format(args.out), M_5_50.reshape((1, len(M_5_50))), fmt='%d')
         bim.to_csv('{}.annot.gz'.format(args.out), sep='\t', index=False, compression='gzip')
         expscore.to_csv('{}.l2.ldscore.gz'.format(args.out), sep='\t', index=False,
                         float_format='%.5f', compression='gzip')
