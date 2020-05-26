@@ -88,15 +88,15 @@ def create_window_ldsc(args):
         for i in range(len(gsets)):
             gset_name = bim.columns[4+i]
             np.savetxt('{}.{}.M_5_50'.format(args.out, gset_name), M_5_50[i].reshape((1, 1)), fmt='%d')
-            bim.iloc[:, range(4) + [4 + i]].to_csv('{}.{}.annot'.format(args.out, gset_name), sep='\t', index=False)
-            expscore.iloc[:, range(3) + [3 + i]].to_csv('{}.{}.l2.ldscore'.format(args.out, gset_name), sep='\t', index=False,
-                        float_format='%.5f')
+            bim.iloc[:, range(4) + [4 + i]].to_csv('{}.{}.annot.gz'.format(args.out, gset_name), sep='\t', index=False, compression='gzip')
+            expscore.iloc[:, range(3) + [3 + i]].to_csv('{}.{}.l2.ldscore.gz'.format(args.out, gset_name), sep='\t', index=False,
+                        float_format='%.5f', compression='gzip')
 
     else:
         np.savetxt('{}.M_5_50'.format(args.out), M_5_50.reshape((1, len(M_5_50))), fmt='%d')
-        bim.to_csv('{}.annot'.format(args.out), sep='\t', index=False)
-        expscore.to_csv('{}.l2.ldscore'.format(args.out), sep='\t', index=False,
-                        float_format='%.5f')
+        bim.to_csv('{}.annot.gz'.format(args.out), sep='\t', index=False, compression='gzip')
+        expscore.to_csv('{}.l2.ldscore.gz'.format(args.out), sep='\t', index=False,
+                        float_format='%.5f', compression='gzip')
 
 
 parser = argparse.ArgumentParser()
@@ -116,8 +116,6 @@ parser.add_argument('--keep', default=os.path.join(dirname, 'data/hm3_snps.txt')
                          'The file should contain one SNP ID per row.')
 parser.add_argument('--out', default=None, type=str,
                     help='Output prefix')
-parser.add_argument('--batch-size', default=None, type=int,
-                    help='Analyze gene sets in batches of input size x. Useful to save memory if many gene sets are present.')
 parser.add_argument('--split-output', default=False, action='store_true',
                     help='Output each gene set in its own file.')
 parser.add_argument('--gset-start', default=None, type=int,
@@ -134,7 +132,4 @@ if __name__ == '__main__':
         raise ValueError('Must specify --gene-sets')
     if not args.out:
         raise ValueError('Must specify --out')
-    if not args.batch_size:
-        create_window_ldsc(args)
-    else:
-        create_window_ldsc_batch(args)
+    create_window_ldsc(args)
