@@ -158,6 +158,9 @@ parser.add_argument('--exp-chr', default=None, type=str,
                     help='Same as --exp, but will read files split into 22 chromosomes in the same '
                          'manner as --exp-chr.')
 # Optional flags
+parser.add_argument('--batch-size', default=100, type=int,
+                    help='Number of gene sets to read and analyze at a time. Default 100. Increasing this number will '
+                         'reduce running time but increase memory usage.')
 parser.add_argument('--ref-ld', default=None, type=str,
                     help='Use --ref-ld to tell MESC which LD Scores to use as the predictors in the regression. '
                          'MESC will automatically append .l2.ldscore/.l2.ldscore.gz to the filename prefix.')
@@ -176,7 +179,7 @@ parser.add_argument('--w-ld-chr', default=None, type=str,
                     help='Same as --w-ld, but will read files split into 22 chromosomes in the same '
                          'manner as --ref-ld-chr.')
 parser.add_argument('--frqfile', default=None, type=str,
-                    help='')
+                    help='Prefix for --frqfile')
 parser.add_argument('--frqfile-chr', default=os.path.join(dirname, 'data/frq_common/1000G.EUR.QC.'), type=str,
                     help='Prefix for --frqfile files split over chromosome.')
 parser.add_argument('--ref-ld-remove-annot', default=None, type=str,

@@ -312,6 +312,7 @@ def estimate_h2med(args, log):
 
     g_list = np.array(g_groups)
     g_groups = pd.Series(g_groups, dtype='category')
+
     cis_indices = [i for i, x in enumerate(g_groups == 'Cis_herit_bin') if x]
     cis_g_ld_cnames = np.array(g_ld_cnames)[cis_indices]
     cis_g_ld = _read_g_ld(args, np.append(['SNP'], cis_g_ld_cnames), log)
@@ -349,35 +350,43 @@ def estimate_h2med(args, log):
     cis_results = cis_hsqhat._g_overlap_output(cis_groups.tolist(), cis_overlap_matrix, cis_G, G_tot, cis_ave_h2_cis, cis_groups)
     cis_results['Gene_category'] = ['h2cis_bin_{}'.format(i+1) for i in range(cis_results.shape[0])]
 
-    for i in g_groups.cat.categories:
-        if i == 'Cis_herit_bin':
-            continue
+    remaining_gsets = [x for x in g_groups.cat.categories if x != 'Cis_herit_bin']
 
-        log.log('Analyzing gene set: ' + re.sub('_Cis_herit_bin', '', i))
-        temp_indices = [j for j, x in enumerate(g_groups == i) if x]
-        temp_G = G_annot[:, cis_indices + temp_indices]
+    if len(remaining_gsets) > 0:
+        total_gsets = len(remaining_gsets)
+        for i in range(0, total_gsets, args.batch_size):
+            log.log('Analyzing gene sets {} to {} (out of {} total)'.format(i+1, min(total_gsets, i+args.batch_size), total_gsets))
+            gsets = remaining_gsets[i:i+args.batch_size]
+            temp_indices = np.where(np.isin(g_list, gsets))[0].tolist()
+            temp_g_ld_cnames = np.array(g_ld_cnames)[temp_indices]
+            temp_g_ld = _read_g_ld_nolog(args, np.append(['SNP'], temp_g_ld_cnames))
+            temp_g_annot_indices = np.array(g_ld_indices)[temp_indices] + 1
 
-        if 0 in temp_G:
-            print('Skipping; gene set too small')
-            continue
+            temp_g_overlap_matrix, _ = _read_g_annot_nolog(args, [np.append(cis_g_annot_indices, temp_g_annot_indices)])
+            temp_g_list = g_list[np.append(cis_indices, temp_indices)]
 
-        temp_ave_h2_cis = ave_h2_cis_annot[:, cis_indices + temp_indices]
-        temp_g_ld_cnames = np.array(g_ld_cnames)[temp_indices]
-        temp_g_ld = _read_g_ld_nolog(args, np.append(['SNP'], temp_g_ld_cnames))
-        temp_g_annot_indices = np.array(g_ld_indices)[temp_indices] + 1
+            temp_sumstats = smart_merge(final_sumstats, temp_g_ld)
 
-        temp_groups = g_list[cis_indices + temp_indices]
-        temp_g_overlap_matrix, _ = _read_g_annot_nolog(args, [np.append(cis_g_annot_indices, temp_g_annot_indices)])
+            for j in gsets:
+                t_indices = np.where(g_list == j)[0].tolist()
+                submat_indices = np.where(np.isin(temp_g_list, ['Cis_herit_bin', j]))[0].tolist()
+                t_G = G_annot[:, cis_indices + t_indices]
 
-        temp_sumstats = smart_merge(final_sumstats, temp_g_ld)
+                if 0 in t_G:
+                    continue
 
-        hsqhat = reg.H2med(chisq, ref_ld, temp_sumstats[np.array(g_ld_cnames)[cis_indices + temp_indices]], s(temp_sumstats[w_ld_cname]), s(temp_sumstats.N),
-                     M_annot, temp_G, temp_ave_h2_cis, n_blocks=n_blocks)
+                t_ave_h2_cis = ave_h2_cis_annot[:, cis_indices + t_indices]
+                t_g_ld = temp_sumstats[np.array(g_ld_cnames)[cis_indices + t_indices]]
+                t_groups = g_list[cis_indices + t_indices]
+                t_g_overlap_matrix = temp_g_overlap_matrix[np.ix_(submat_indices, submat_indices)]
 
-        g_results = hsqhat._g_overlap_output(temp_groups.tolist(), temp_g_overlap_matrix, temp_G, G_tot, temp_ave_h2_cis, temp_groups)
-        g_results = g_results.iloc[-1:,:]
-        g_results['Gene_category'] = re.sub('_Cis_herit_bin', '', g_results['Gene_category'].values[0])
-        cis_results = cis_results.append(g_results)
+                hsqhat = reg.H2med(chisq, ref_ld, t_g_ld, s(temp_sumstats[w_ld_cname]), s(temp_sumstats.N),
+                             M_annot, t_G, t_ave_h2_cis, n_blocks=n_blocks)
+
+                g_results = hsqhat._g_overlap_output(t_groups.tolist(), t_g_overlap_matrix, t_G, G_tot, t_ave_h2_cis, t_groups)
+                g_results = g_results.iloc[-1:,:]
+                g_results['Gene_category'] = re.sub('_Cis_herit_bin', '', g_results['Gene_category'].values[0])
+                cis_results = cis_results.append(g_results)
 
     df_all = pd.DataFrame({
         'Quantity': ['h2med', 'h2nonmed', 'h2'],
