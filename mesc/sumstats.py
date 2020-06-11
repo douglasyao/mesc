@@ -356,6 +356,11 @@ def estimate_h2med(args, log):
         log.log('Analyzing gene set: ' + re.sub('_Cis_herit_bin', '', i))
         temp_indices = [j for j, x in enumerate(g_groups == i) if x]
         temp_G = G_annot[:, cis_indices + temp_indices]
+
+        if 0 in temp_G:
+            print('Skipping; gene set too small')
+            continue
+
         temp_ave_h2_cis = ave_h2_cis_annot[:, cis_indices + temp_indices]
         temp_g_ld_cnames = np.array(g_ld_cnames)[temp_indices]
         temp_g_ld = _read_g_ld_nolog(args, np.append(['SNP'], temp_g_ld_cnames))

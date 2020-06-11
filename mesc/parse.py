@@ -217,7 +217,7 @@ def G_and_ave_h2_cis(fh, g_indices, num=None):
         all_G = [parsefunc(sub_chr(fh, i) + suffix_G) for i in range(1, num + 1)]
         G_annot = np.sum(all_G, axis=0)
         all_h2cis = [parsefunc(sub_chr(fh, i) + suffix_h2cis) for i in range(1, num + 1)]
-        h2_cis_annot = (np.sum(np.multiply(all_G, all_h2cis), axis=0) / G_annot)
+        h2_cis_annot = np.divide(np.sum(np.multiply(all_G, all_h2cis), axis=0), G_annot, out=np.zeros_like(all_h2cis), where=G_annot!=0) # return 0 when divide by zero
     else:
         G_annot = parsefunc(fh + suffix_G)
         h2_cis_annot = parsefunc(fh + suffix_h2cis)
