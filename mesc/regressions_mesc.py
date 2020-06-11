@@ -10,10 +10,9 @@ from scipy.stats import norm, chi2
 import jackknife as jk
 from irwls import IRWLS
 from scipy.stats import t as tdist
-from collections import namedtuple
 np.seterr(divide='raise', invalid='raise')
 
-s = lambda x: remove_brackets(str(np.matrix(x)))
+s = lambda x: remove_brackets(str(np.array(x)))
 
 
 def update_separators(s, ii):
@@ -333,7 +332,7 @@ class H2med(MESC):
         one_d_convert = lambda x: np.array(x).reshape(np.prod(x.shape))
 
         g_groups = pd.Series(g_groups, dtype='category')
-        category_names = category_names.append(g_groups.cat.categories[g_groups.cat.categories != 'Cis_herit_bin'])
+        category_names = np.append(category_names, g_groups.cat.categories[g_groups.cat.categories != 'Cis_herit_bin'])
         cis_indices = [i for i, x in enumerate(g_groups == 'Cis_herit_bin') if x]
 
         g_overlap_matrix_prop = np.zeros([self.n_g_annot, self.n_g_annot])

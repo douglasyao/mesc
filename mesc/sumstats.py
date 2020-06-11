@@ -77,17 +77,39 @@ def smart_merge(x, y):
 def _read_ref_ld(args, log):
     '''Read reference LD Scores.'''
     ref_ld, indices, _ = _read_chr_split_files(args.ref_ld_chr, args.ref_ld, log,
-                                   'LD Score', ps.ldscore_fromlist, args=args, suffix='ldscore')
+                                   'LD Scores', ps.ldscore_fromlist, args=args, suffix='ldscore')
     log.log(
         'Read LD Scores for {N} SNPs.'.format(N=len(ref_ld)))
     return ref_ld, indices
 
-def _read_g_ld(args, log):
-    g_ld, indices, groups = _read_chr_split_files(args.exp_chr, args.exp, log,
-                                 'expression score', ps.ldscore_fromlist, args=args, suffix='expscore')
+def _read_g_ld(args, cnames, log):
+    g_ld = _read_chr_split_files(args.exp_chr, args.exp, log,
+                                 'expression scores', ps.expscore, cnames=cnames)
     log.log(
         'Read expression scores for {N} SNPs.'.format(N=len(g_ld)))
-    return g_ld, indices, groups
+    return g_ld
+
+def _read_g_ld_nolog(args, cnames):
+    g_ld = _read_chr_split_files_nolog(args.exp_chr, args.exp, ps.expscore, cnames=cnames)
+    return g_ld
+
+
+def _read_header(args):
+    '''Read header from .expscore files'''
+    if args.exp_chr:
+        f = ps.sub_chr(args.exp_chr, 1) + '.expscore'
+        comp = ps.which_compression(f)
+        indices, cnames, cgroups = ps.filter_columns(f + comp[0], comp[1], fsuffix='expscore', args=args)
+        cnames = [x for x in cnames if x not in ['SNP','CHR', 'BP', 'CM']]
+
+    else:
+        f = args.exp + '.expscore'
+        comp = ps.which_compression(f)
+        indices, cnames, cgroups = ps.filter_columns(f + comp[0], comp[1], fsuffix='expscore', args=args)
+        cnames = [x for x in cnames if x not in ['SNP','CHR', 'BP', 'CM']]
+
+    return indices, cnames, cgroups
+
 
 def _read_annot(args, log, cnames):
     '''Read annot matrix.'''
@@ -115,8 +137,17 @@ def _read_g_annot(args, log, cnames):
 
     return overlap_matrix, G_tot
 
+def _read_g_annot_nolog(args, cnames):
+    try:
+        if args.exp is not None or args.exp_chr is not None:
+            overlap_matrix, G_tot = _read_chr_split_files_nolog(args.exp_chr, args.exp, ps.g_annot, cnames=cnames)
+    except Exception:
+        raise
 
-def _read_M(args, log, n_annot, ref_indices):
+    return overlap_matrix, G_tot
+
+
+def _read_M(args, n_annot, ref_indices):
     '''Read M (--M, --M-file, etc).'''
     if args.ref_ld:
         M_annot = ps.M_fromlist(
@@ -132,12 +163,12 @@ def _read_M(args, log, n_annot, ref_indices):
 
     return M_annot
 
-def _read_G_and_ave_h2_cis(args, log, g_indices):
+def _read_G_and_ave_h2_cis(args, g_indices):
 
     if args.exp:
-        G_annot, h2_cis_annot = ps.G_and_ave_h2_cis_fromlist(_splitp(args.exp), g_indices)
+        G_annot, h2_cis_annot = ps.G_and_ave_h2_cis(args.exp, g_indices)
     elif args.exp_chr:
-        G_annot, h2_cis_annot = ps.G_and_ave_h2_cis_fromlist(_splitp(args.exp_chr), g_indices, num=_N_CHR)
+        G_annot, h2_cis_annot = ps.G_and_ave_h2_cis(args.exp_chr, g_indices, num=_N_CHR)
 
     return G_annot, h2_cis_annot
 
@@ -148,7 +179,7 @@ def _read_w_ld(args, log):
         raise ValueError(
             '--w-ld must point to a single fileset (no commas allowed).')
     w_ld, _, _ = _read_chr_split_files(args.w_ld_chr, args.w_ld, log,
-                                 'regression weight LD Score', ps.ldscore_fromlist, args=args, suffix='weight')
+                                 'regression weight LD Scores', ps.ldscore_fromlist, args=args, suffix='weight')
     if len(w_ld.columns) != 2:
         raise ValueError('--w-ld may only have one LD Score column.')
     w_ld.columns = ['SNP', 'LD_weights']  # prevent colname conflicts w/ ref ld
@@ -169,6 +200,18 @@ def _read_chr_split_files(chr_arg, not_chr_arg, log, noun, parsefunc, **kwargs):
             out = parsefunc(_splitp(chr_arg), num=_N_CHR, **kwargs)
     except ValueError as e:
         log.log('Error parsing {N}.'.format(N=noun))
+        raise e
+
+    return out
+
+def _read_chr_split_files_nolog(chr_arg, not_chr_arg, parsefunc, **kwargs):
+    '''Read files split across 22 chromosomes (annot, ref_ld, w_ld).'''
+    try:
+        if not_chr_arg:
+            out = parsefunc(_splitp(not_chr_arg), **kwargs)
+        elif chr_arg:
+            out = parsefunc(_splitp(chr_arg), num=_N_CHR, **kwargs)
+    except ValueError as e:
         raise e
 
     return out
@@ -239,23 +282,21 @@ def _merge_and_log(ld, sumstats, noun, log):
 def _read_ld_sumstats(args, log, fh, alleles=False, dropna=True):
     sumstats = _read_sumstats(args, log, fh, alleles=alleles, dropna=dropna)
     ref_ld, ref_indices = _read_ref_ld(args, log)
-    g_ld, g_indices, g_groups = _read_g_ld(args, log)
+
+    g_indices, g_ld_cnames, g_groups = _read_header(args)
 
     n_annot = len(ref_ld.columns) - 1
-    n_g_annot = len(g_ld.columns) - 1
-    M_annot = _read_M(args, log, n_annot, ref_indices)
-    G_annot, ave_h2_cis_annot = _read_G_and_ave_h2_cis(args, log, g_indices)
+    M_annot = _read_M(args, n_annot, ref_indices)
+    G_annot, ave_h2_cis_annot = _read_G_and_ave_h2_cis(args, g_indices)
 
     M_annot, ref_ld, novar_cols = _check_variance(log, M_annot, ref_ld)
     w_ld = _read_w_ld(args, log)
-    sumstats = _merge_and_log(g_ld, sumstats, 'expression scores', log)
     sumstats = _merge_and_log(ref_ld, sumstats, 'LD scores', log)
     sumstats = _merge_and_log(sumstats, w_ld, 'LD weights', log)
     w_ld_cname = sumstats.columns[-1]
     ref_ld_cnames = ref_ld.columns[1:len(ref_ld.columns)]
-    g_ld_cnames = g_ld.columns[1:len(g_ld.columns)]
 
-    return M_annot, G_annot, ave_h2_cis_annot, w_ld_cname, ref_ld_cnames, g_ld_cnames, sumstats, novar_cols, n_annot, n_g_annot, ref_indices, g_indices, g_groups
+    return M_annot, G_annot, ave_h2_cis_annot, w_ld_cname, ref_ld_cnames, g_ld_cnames, sumstats, novar_cols, n_annot, ref_indices, g_indices, g_groups
 
 
 def array_to_string(x):
@@ -266,63 +307,69 @@ def estimate_h2med(args, log):
     '''Estimate h2med and partitioned h2med.'''
     args = copy.deepcopy(args)
 
-    M_annot, G_annot, ave_h2_cis_annot, w_ld_cname, ref_ld_cnames, g_ld_cnames, sumstats, novar_cols, n_annot, n_g_annot, ref_ld_indices, g_ld_indices, g_groups = _read_ld_sumstats(
+    M_annot, G_annot, ave_h2_cis_annot, w_ld_cname, ref_ld_cnames, g_ld_cnames, sumstats, novar_cols, n_annot, ref_ld_indices, g_ld_indices, g_groups = _read_ld_sumstats(
         args, log, args.h2med)
-
-    ref_ld = np.array(sumstats[ref_ld_cnames])
-    g_ld = np.array(sumstats[g_ld_cnames])
-    _check_ld_condnum(args, log, ref_ld_cnames)
-    _warn_length(log, sumstats)
-    n_snp = len(sumstats)
-    n_blocks = min(n_snp, 200)
-    chisq_max = args.chisq_max
-
-    if args.chisq_max is None:
-        chisq_max = max(0.001*sumstats.N.max(), 80)
-
-    s = lambda x: np.array(x).reshape((n_snp, 1))
-    chisq = s(sumstats.Z**2)
-    if chisq_max is not None:
-        ii = np.ravel(chisq < chisq_max)
-        sumstats = sumstats.ix[ii, :]
-        log.log('Removed {M} SNPs with chi^2 > {C} ({N} SNPs remain)'.format(
-                C=chisq_max, N=np.sum(ii), M=n_snp-np.sum(ii)))
-        n_snp = np.sum(ii)  # lambdas are late-binding, so this works
-        ref_ld = np.array(sumstats[ref_ld_cnames])
-        g_ld = np.array(sumstats[g_ld_cnames])
-        chisq = chisq[ii].reshape((n_snp, 1))
 
     g_list = np.array(g_groups)
     g_groups = pd.Series(g_groups, dtype='category')
     cis_indices = [i for i, x in enumerate(g_groups == 'Cis_herit_bin') if x]
-    cis_g_ld_cnames = g_ld_cnames[cis_indices]
+    cis_g_ld_cnames = np.array(g_ld_cnames)[cis_indices]
+    cis_g_ld = _read_g_ld(args, np.append(['SNP'], cis_g_ld_cnames), log)
+    final_sumstats = _merge_and_log(sumstats, cis_g_ld, 'expression scores', log)
+
+    ref_ld = np.array(final_sumstats[ref_ld_cnames])
+    _check_ld_condnum(args, log, ref_ld_cnames)
+    _warn_length(log, final_sumstats)
+    n_snp = len(final_sumstats)
+    n_blocks = min(n_snp, 200)
+    chisq_max = args.chisq_max
+
+    if args.chisq_max is None:
+        chisq_max = max(0.001*final_sumstats.N.max(), 80)
+
+    s = lambda x: np.array(x).reshape((n_snp, 1))
+    chisq = s(final_sumstats.Z**2)
+    if chisq_max is not None:
+        ii = np.ravel(chisq < chisq_max)
+        final_sumstats = final_sumstats.ix[ii, :]
+        log.log('Removed {M} SNPs with chi^2 > {C} ({N} SNPs remain)'.format(
+                C=chisq_max, N=np.sum(ii), M=n_snp-np.sum(ii)))
+        n_snp = np.sum(ii)  # lambdas are late-binding, so this works
+        ref_ld = np.array(final_sumstats[ref_ld_cnames])
+        chisq = chisq[ii].reshape((n_snp, 1))
+
     cis_G = G_annot[:, cis_indices]
     cis_ave_h2_cis = ave_h2_cis_annot[:, cis_indices]
-    cis_g_ld = g_ld[:, cis_indices]
-    cis_hsqhat = reg.H2med(chisq, ref_ld, cis_g_ld, s(sumstats[w_ld_cname]), s(sumstats.N),
+
+    cis_hsqhat = reg.H2med(chisq, ref_ld, final_sumstats[np.array(g_ld_cnames)[cis_indices]], s(final_sumstats[w_ld_cname]), s(final_sumstats.N),
                      M_annot, cis_G, cis_ave_h2_cis, n_blocks=n_blocks)
     cis_groups = g_list[cis_indices]
-    g_annot_cnames = [[y + 1 for y in x] for x in g_ld_indices]
-    g_overlap_matrix, G_tot = _read_g_annot(args, log, g_annot_cnames)
-    cis_overlap_matrix = g_overlap_matrix[np.ix_(cis_indices, cis_indices)]
-    cis_results = cis_hsqhat._g_overlap_output(cis_g_ld_cnames, cis_overlap_matrix, cis_G, G_tot, cis_ave_h2_cis, cis_groups)
+    cis_g_annot_indices = np.array(g_ld_indices)[cis_indices] + 1
+    cis_overlap_matrix, G_tot = _read_g_annot(args, log, [cis_g_annot_indices])
+    cis_results = cis_hsqhat._g_overlap_output(cis_groups.tolist(), cis_overlap_matrix, cis_G, G_tot, cis_ave_h2_cis, cis_groups)
     cis_results['Gene_category'] = ['h2cis_bin_{}'.format(i+1) for i in range(cis_results.shape[0])]
 
     for i in g_groups.cat.categories:
         if i == 'Cis_herit_bin':
             continue
+
+        log.log('Analyzing gene set: ' + re.sub('_Cis_herit_bin', '', i))
         temp_indices = [j for j, x in enumerate(g_groups == i) if x]
         temp_G = G_annot[:, cis_indices + temp_indices]
         temp_ave_h2_cis = ave_h2_cis_annot[:, cis_indices + temp_indices]
-        temp_g_ld = g_ld[:, cis_indices + temp_indices]
-        temp_g_ld_cnames = g_ld_cnames[cis_indices + temp_indices]
-        temp_groups = g_list[cis_indices + temp_indices]
-        temp_g_overlap_matrix = g_overlap_matrix[np.ix_(cis_indices + temp_indices, cis_indices + temp_indices)]
+        temp_g_ld_cnames = np.array(g_ld_cnames)[temp_indices]
+        temp_g_ld = _read_g_ld_nolog(args, np.append(['SNP'], temp_g_ld_cnames))
+        temp_g_annot_indices = np.array(g_ld_indices)[temp_indices] + 1
 
-        hsqhat = reg.H2med(chisq, ref_ld, temp_g_ld, s(sumstats[w_ld_cname]), s(sumstats.N),
+        temp_groups = g_list[cis_indices + temp_indices]
+        temp_g_overlap_matrix, _ = _read_g_annot_nolog(args, [np.append(cis_g_annot_indices, temp_g_annot_indices)])
+
+        temp_sumstats = smart_merge(final_sumstats, temp_g_ld)
+
+        hsqhat = reg.H2med(chisq, ref_ld, temp_sumstats[np.array(g_ld_cnames)[cis_indices + temp_indices]], s(temp_sumstats[w_ld_cname]), s(temp_sumstats.N),
                      M_annot, temp_G, temp_ave_h2_cis, n_blocks=n_blocks)
 
-        g_results = hsqhat._g_overlap_output(temp_g_ld_cnames, temp_g_overlap_matrix, temp_G, G_tot, temp_ave_h2_cis, temp_groups)
+        g_results = hsqhat._g_overlap_output(temp_groups.tolist(), temp_g_overlap_matrix, temp_G, G_tot, temp_ave_h2_cis, temp_groups)
         g_results = g_results.iloc[-1:,:]
         g_results['Gene_category'] = re.sub('_Cis_herit_bin', '', g_results['Gene_category'].values[0])
         cis_results = cis_results.append(g_results)

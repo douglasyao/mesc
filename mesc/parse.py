@@ -59,7 +59,6 @@ def get_compression(fh):
     return compression
 
 
-
 def sumstats(fh, alleles=False, dropna=True):
     '''Parses .sumstats files. See docs/file_formats_sumstats.txt.'''
     dtype_dict = {'SNP': str,   'Z': float, 'N': float, 'A1': str, 'A2': str}
@@ -77,28 +76,6 @@ def sumstats(fh, alleles=False, dropna=True):
         x = x.dropna(how='any')
 
     return x
-
-
-def ldscore_fromlist(flist, suffix, args, num=None):
-    '''Sideways concatenation of a list of LD Score files.'''
-    ldscore_array = []
-    indices_array = []
-    group_array = []
-    for i, fh in enumerate(flist):
-        y, indices, cgroup = ldscore(fh, suffix, args, num)
-        if i > 0:
-            if not series_eq(y.SNP, ldscore_array[0].SNP):
-                raise ValueError('LD Scores for concatenation must have identical SNP columns.')
-            else:  # keep SNP column from only the first file
-                y = y.drop(['SNP'], axis=1)
-
-        new_col_dict = {c: c + '_' + str(i) for c in y.columns if c != 'SNP'}
-        y.rename(columns=new_col_dict, inplace=True)
-        ldscore_array.append(y)
-        indices_array.append(indices)
-        group_array.extend(cgroup)
-
-    return pd.concat(ldscore_array, axis=1), indices_array, group_array
 
 def filter_columns(fh, compression, fsuffix, args):
     '''Filter column names when reading LD scores or expression scores'''
@@ -150,6 +127,9 @@ def l2_parser(fh, compression, fsuffix, args):
         x = x.drop(['MAF', 'CM'], axis=1)
     return x, indices, cgroups
 
+def expscore_parser(fh, compression, cnames):
+    x = read_csv(fh, header=0, compression=compression, usecols=cnames)
+    return x
 
 def annot_parser(fh, compression, cnames, frqfile_full=None, compression_frq=None):
     '''Parse annot files'''
@@ -179,8 +159,6 @@ def ldscore(fh, fsuffix, args, num=None):
     '''Parse .l2.ldscore files, split across num chromosomes. See docs/file_formats_ld.txt.'''
     if fsuffix == 'weight':
         suffix = '.l2.ldscore'
-    elif fsuffix == 'expscore':
-        suffix = '.expscore'
     else:
         suffix = '.l2.' + fsuffix
     if num is not None:  # num files, e.g., one per chromosome
@@ -198,6 +176,22 @@ def ldscore(fh, fsuffix, args, num=None):
     x = x.sort_values(by=['CHR', 'BP']) # SEs will be wrong unless sorted
     x = x.drop(['CHR', 'BP'], axis=1).drop_duplicates(subset='SNP')
     return x, indices, cgroup
+
+def expscore(fh, cnames, num=None):
+    '''Parse .expscore files, split across num chromosomes. See docs/file_formats_ld.txt.'''
+    fh = fh[0]
+    suffix = '.expscore'
+    if num is not None:  # num files, e.g., one per chromosome
+        first_fh = sub_chr(fh, 1) + suffix
+        s, compression = which_compression(first_fh)
+        chr_ld = [expscore_parser(sub_chr(fh, i) + suffix + s, compression, cnames) for i in range(1, num + 1)]
+        x = pd.concat(chr_ld)  # automatically sorted by chromosome
+    else:  # just one file
+        s, compression = which_compression(fh + suffix)
+        x = expscore_parser(fh + suffix + s, compression, cnames)
+
+    x = x.drop_duplicates(subset='SNP')
+    return x
 
 
 def M(fh, indices, num=None, N=2, common=False):
@@ -232,6 +226,27 @@ def G_and_ave_h2_cis(fh, g_indices, num=None):
     G_annot = G_annot[g_indices]
     h2_cis_annot = h2_cis_annot[g_indices]
     return G_annot.reshape((1, len(G_annot))), h2_cis_annot.reshape((1, len(h2_cis_annot)))
+
+def ldscore_fromlist(flist, suffix, args, num=None):
+    '''Sideways concatenation of a list of LD Score files.'''
+    ldscore_array = []
+    indices_array = []
+    group_array = []
+    for i, fh in enumerate(flist):
+        y, indices, cgroup = ldscore(fh, suffix, args, num)
+        if i > 0:
+            if not series_eq(y.SNP, ldscore_array[0].SNP):
+                raise ValueError('LD Scores for concatenation must have identical SNP columns.')
+            else:  # keep SNP column from only the first file
+                y = y.drop(['SNP'], axis=1)
+
+        new_col_dict = {c: c + '_' + str(i) for c in y.columns if c != 'SNP'}
+        y.rename(columns=new_col_dict, inplace=True)
+        ldscore_array.append(y)
+        indices_array.append(indices)
+        group_array.extend(cgroup)
+
+    return pd.concat(ldscore_array, axis=1), indices_array, group_array
 
 def M_fromlist(flist, indices, num=None, N=2, common=False):
     '''Read a list of .M* files and concatenate sideways.'''
@@ -268,7 +283,7 @@ def annot(fh_list, cnames, num=None, frqfile=None):
 
         y = []
         M_tot = 0
-        for chr in xrange(1, num + 1):
+        for chr in range(1, num + 1):
             if frqfile is not None:
                 df_annot_chr_list = [annot_parser(sub_chr(fh, chr) + annot_suffix[i], annot_compression[i],
                                                   cnames[i], sub_chr(frqfile, chr) + frq_suffix, frq_compression)
@@ -277,7 +292,7 @@ def annot(fh_list, cnames, num=None, frqfile=None):
                 df_annot_chr_list = [annot_parser(sub_chr(fh, chr) + annot_suffix[i], annot_compression[i], cnames[i])
                                      for i, fh in enumerate(fh_list)]
 
-            annot_matrix_chr_list = [np.matrix(df_annot_chr) for df_annot_chr in df_annot_chr_list]
+            annot_matrix_chr_list = [np.array(df_annot_chr) for df_annot_chr in df_annot_chr_list]
             annot_matrix_chr = np.hstack(annot_matrix_chr_list)
             y.append(np.dot(annot_matrix_chr.T, annot_matrix_chr))
             M_tot += len(df_annot_chr_list[0])
@@ -301,7 +316,7 @@ def annot(fh_list, cnames, num=None, frqfile=None):
             df_annot_list = [annot_parser(fh + annot_suffix[i], annot_compression[i], cnames[i])
                              for i, fh in enumerate(fh_list)]
 
-        annot_matrix_list = [np.matrix(y) for y in df_annot_list]
+        annot_matrix_list = [np.array(y) for y in df_annot_list]
         annot_matrix = np.hstack(annot_matrix_list)
         x = np.dot(annot_matrix.T, annot_matrix)
         M_tot = len(df_annot_list[0])
@@ -323,12 +338,12 @@ def g_annot(fh_list, cnames, num=None):
 
         y = []
         M_tot = 0
-        for chr in xrange(1, num + 1):
+        for chr in range(1, num + 1):
 
             df_annot_chr_list = [g_annot_parser(sub_chr(fh, chr) + annot_suffix[i], annot_compression[i], cnames[i])
                                  for i, fh in enumerate(fh_list)]
 
-            annot_matrix_chr_list = [np.matrix(df_annot_chr) for df_annot_chr in df_annot_chr_list]
+            annot_matrix_chr_list = [np.array(df_annot_chr) for df_annot_chr in df_annot_chr_list]
             annot_matrix_chr = np.hstack(annot_matrix_chr_list)
             y.append(np.dot(annot_matrix_chr.T, annot_matrix_chr))
             M_tot += len(df_annot_chr_list[0])
@@ -343,7 +358,7 @@ def g_annot(fh_list, cnames, num=None):
         df_annot_list = [g_annot_parser(fh + annot_suffix[i], annot_compression[i], cnames[i])
                              for i, fh in enumerate(fh_list)]
 
-        annot_matrix_list = [np.matrix(y) for y in df_annot_list]
+        annot_matrix_list = [np.array(y) for y in df_annot_list]
         annot_matrix = np.hstack(annot_matrix_list)
         x = np.dot(annot_matrix.T, annot_matrix)
 
