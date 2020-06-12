@@ -9,6 +9,7 @@ import parse as ps
 import scipy.stats
 import regressions_ldsc as reg
 import sys
+from collections import defaultdict, OrderedDict
 
 
 def sub_chr(s, chr):
@@ -136,6 +137,17 @@ def estimate_expression_cis_herit(ref_ld, frq, zscores, ref_ld_indices):
 
     return herit, herit_se, herit_p
 
+def read_gene_sets(fname):
+    '''
+    Read gene sets from file.
+    '''
+    gsets = OrderedDict()
+    with open(fname, 'rb') as f:
+        for line in f:
+            line = line.strip().split()
+            gsets[line[0]] = line[1:]
+    return gsets
+
 def get_expression_scores(args):
     cismat = args.eqtl_sumstat
     gene_num = 0
@@ -148,6 +160,11 @@ def get_expression_scores(args):
         columns = range(7)
 
     n_genes, n_lines = check_order_and_get_len(cismat, columns)
+
+    if args.gene_sets is not None:
+        gsets = read_gene_sets(args.gene_sets)
+
+    keep_snps = pd.read_csv(args.keep, header=None)
 
     with open(cismat) as f:
         for i, line in enumerate(f):
@@ -212,36 +229,90 @@ def get_expression_scores(args):
                     continue
 
                 print('Computing expression scores for chromosome {}'.format(prev_chr))
+                genes = [x[0] for x in all_summ]
                 eqtl_herits = [x[1] for x in all_summ]
-                g_annot = np.zeros((len(all_summ), args.num_bins), dtype=int)
-                eqtl_annot = np.zeros((len(snps), args.num_bins))
-                gene_bins = pd.qcut(np.array(eqtl_herits), args.num_bins, labels=range(args.num_bins)).astype(int)
-                g_bin_names = ['Cis_herit_bin_{}'.format(x) for x in range(1, args.num_bins+1)]
-                for j in range(0, len(all_summ)):
-                    g_annot[j, gene_bins[j]] = 1
-                    start_snp = all_summ[j][2]['SNP'].values[0]
-                    end_snp = all_summ[j][2]['SNP'].values[-1]
-                    start_snp_idx = snp_indices[start_snp]
-                    end_snp_idx = snp_indices[end_snp]
 
-                    if np.array_equal(snps.iloc[start_snp_idx:end_snp_idx+1, 1].values, all_summ[j][2]['SNP'].values):
-                        eqtl_annot[start_snp_idx:end_snp_idx+1, gene_bins[j]] += all_summ[j][2]['EFF'].values
-                    else:
-                        snp_idx = [snp_indices[x] for x in all_summ[j][2]['SNP'].tolist()]
-                        eqtl_annot[snp_idx, gene_bins[j]] += all_summ[j][2]['EFF'].values
+                # gene sets specified
+                if args.gene_sets is not None:
+
+                    # get gset names
+                    gset_names = ['Cis_herit_bin_{}'.format(x) for x in range(1, args.num_bins + 1)]
+                    for k in gsets.keys():
+                        gset_names.extend(['{}_Cis_herit_bin_{}'.format(k, x) for x in range(1, args.num_gene_bins + 1)])
+
+                    # create dict indicating membership of each gene in each gene set
+                    gene_gset_dict = defaultdict(list)
+                    gene_bins = pd.qcut(np.array(eqtl_herits), args.num_bins, labels=range(1, args.num_bins + 1)).astype(int)
+                    for ix, gene in enumerate(genes):
+                        gene_gset_dict[gene].append('Cis_herit_bin_{}'.format(gene_bins[ix]))
+                    for k, v in gsets.items():
+                        v = [x for x in v if x in genes]
+                        if len(v) > 0:
+                            gene_indices = np.where(np.isin(genes, v))[0]
+                            gset_gene_bins = pd.qcut(np.array(eqtl_herits)[gene_indices], args.num_gene_bins, labels=range(1, args.num_gene_bins + 1)).astype(int)
+                            for ix, gene in enumerate(v):
+                                gene_gset_dict[gene].append('{}_Cis_herit_bin_{}'.format(k, gset_gene_bins[ix]))
+
+                    eqtl_annot = np.zeros((len(snps), len(gset_names)))
+                    g_annot = np.zeros((len(all_summ), len(gset_names)))
+                    gset_indices = dict(zip(gset_names, range(len(gset_names))))
+
+                    # populate expscore and gannot
+                    for j in range(0, len(all_summ)):
+                        gset_idx = [gset_indices[x] for x in gene_gset_dict[genes[j]]]
+                        g_annot[j, gset_idx] = 1
+                        start_snp = all_summ[j][2]['SNP'].values[0]
+                        end_snp = all_summ[j][2]['SNP'].values[-1]
+                        start_snp_idx = snp_indices[start_snp]
+                        end_snp_idx = snp_indices[end_snp]
+
+                        if np.array_equal(snps.iloc[start_snp_idx:end_snp_idx + 1, 1].values,
+                                          all_summ[j][2]['SNP'].values):
+                            for gix in gset_idx:
+                                eqtl_annot[start_snp_idx:end_snp_idx + 1, gix] += all_summ[j][2]['EFF'].values
+                        else:
+                            snp_idx = [snp_indices[x] for x in all_summ[j][2]['SNP'].tolist()]
+                            for gix in gset_idx:
+                                eqtl_annot[snp_idx, gix] += all_summ[j][2]['EFF'].values
+
+                    # create G and ave h2cis files
+                    G = np.sum(g_annot, axis=0)
+                    ave_cis_herit = np.divide(np.dot(g_annot.T, eqtl_herits), G, out=np.zeros_like(G), where=G!=0)
+                    g_annot = g_annot.astype(int)
+
+                # gene sets not specified
+                else:
+                    eqtl_herits = [x[1] for x in all_summ]
+                    g_annot = np.zeros((len(all_summ), args.num_bins), dtype=int)
+                    eqtl_annot = np.zeros((len(snps), args.num_bins))
+                    gene_bins = pd.qcut(np.array(eqtl_herits), args.num_bins, labels=range(args.num_bins)).astype(int)
+                    gset_names = ['Cis_herit_bin_{}'.format(x) for x in range(1, args.num_bins+1)]
+                    for j in range(0, len(all_summ)):
+                        g_annot[j, gene_bins[j]] = 1
+                        start_snp = all_summ[j][2]['SNP'].values[0]
+                        end_snp = all_summ[j][2]['SNP'].values[-1]
+                        start_snp_idx = snp_indices[start_snp]
+                        end_snp_idx = snp_indices[end_snp]
+
+                        if np.array_equal(snps.iloc[start_snp_idx:end_snp_idx+1, 1].values, all_summ[j][2]['SNP'].values):
+                            eqtl_annot[start_snp_idx:end_snp_idx+1, gene_bins[j]] += all_summ[j][2]['EFF'].values
+                        else:
+                            snp_idx = [snp_indices[x] for x in all_summ[j][2]['SNP'].tolist()]
+                            eqtl_annot[snp_idx, gene_bins[j]] += all_summ[j][2]['EFF'].values
+
+                    G = np.sum(g_annot, axis=0)
+                    ave_cis_herit = []
+                    for j in range(5):
+                        temp_herits = np.array(eqtl_herits)[np.where(gene_bins == j)[0]]
+                        ave_cis_herit.append(np.median(temp_herits))
 
                 g_annot_final = pd.DataFrame(np.c_[[x[0] for x in all_summ], g_annot])
-                g_annot_final.columns = ['Gene'] + g_bin_names
+                g_annot_final.columns = ['Gene'] + gset_names
                 g_annot_final.to_csv('{}.{}.gannot.gz'.format(args.out, prev_chr), sep='\t', index=False, compression='gzip')
 
                 all_herit = pd.DataFrame.from_records(all_herit,
                                                       columns=['Gene', 'Chrom', 'h2cis', 'h2cis_se',
                                                                'h2cis_p'])
-                G = np.sum(g_annot, axis=0)
-                ave_cis_herit = []
-                for j in range(5):
-                    temp_herits = np.array(eqtl_herits)[np.where(gene_bins == j)[0]]
-                    ave_cis_herit.append(np.median(temp_herits))
 
                 np.savetxt('{}.{}.G'.format(args.out, prev_chr), G.reshape((1, len(G))), fmt='%d')
                 np.savetxt('{}.{}.ave_h2cis'.format(args.out, prev_chr),
@@ -251,7 +322,8 @@ def get_expression_scores(args):
                 expscore = pd.concat([
                     pd.DataFrame(snps.values),
                     pd.DataFrame(eqtl_annot)], axis=1)
-                expscore.columns = snps.columns.tolist() + g_bin_names
+                expscore.columns = snps.columns.tolist() + gset_names
+                expscore = expscore.loc[expscore['SNP'].isin(keep_snps[0]).values]
                 expscore.to_csv('{}.{}.expscore.gz'.format(args.out, prev_chr), sep='\t', index=False, compression='gzip', float_format='%.5f')
 
                 all_herit.to_csv('{}.{}.hsq'.format(args.out, prev_chr), sep='\t', index=False, float_format='%.5f')

@@ -140,12 +140,16 @@ parser.add_argument('--compute-expscore-sumstat', default=False, action='store_t
                     help='Estimate expression scores from eQTL summary statistics')
 parser.add_argument('--eqtl-sumstat', default=None, type=str,
                     help='eQTL summary statistic data.')
+parser.add_argument('--gene-sets', default=None, type=str,
+                    help='File containing gene sets. One gene set per line. First column is gene set name, remaining '
+                         'columns are gene names.')
 # Optional flags
 parser.add_argument('--columns', default=None, type=str,
                     help='List of indices separated by commas.')
 parser.add_argument('--num-bins', default=5, type=int,
-                    help='Number of expression cis-heritability bins. Default 5.')
-
+                    help='Number of overall expression cis-heritability bins. Default 5.')
+parser.add_argument('--num-gene-bins', default=3, type=int,
+                    help='Number of expression cis-heritability bins per gene set. Default 3.')
 
 # Estimate mediated heritability
 # Required flags
