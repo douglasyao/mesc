@@ -221,8 +221,8 @@ def get_expression_scores(args):
                 temp_gene_mat = temp_gene_mat.sort_values('BP')
                 temp_gene_mat = temp_gene_mat.loc[temp_gene_mat['SNP'].isin(snps['SNP']),:]
 
-                if len(temp_gene_mat) < 10:
-                    print('<10 SNPs around gene; skipping')
+                if len(temp_gene_mat) <= 10:
+                    print('<= 10 SNPs around gene; skipping')
                 else:
                     herit = estimate_expression_cis_herit(ref_ld, frq, temp_gene_mat, ref_ld_indices)
                     temp_gene_mat['EFF'] = temp_gene_mat['Z'].values**2 / temp_gene_mat['N'].values - 1 / temp_gene_mat['N'].values
