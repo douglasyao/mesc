@@ -208,8 +208,14 @@ def get_expression_scores(args):
                 temp_gene_mat = temp_gene_mat[columns]
                 temp_gene_mat.columns = colnames
                 for col in [1,3,4,5]:
-                    temp_gene_mat.iloc[:,col] = temp_gene_mat.iloc[:,col].astype(int)
-                temp_gene_mat.iloc[:,6] = temp_gene_mat.iloc[:,6].astype(float)
+                    try:
+                        temp_gene_mat.iloc[:,col] = temp_gene_mat.iloc[:,col].astype(int)
+                    except Exception as e:
+                        raise ValueError(str(e) + '\nPlease double check that the proper columns in the eQTL file are specified.')
+                try:
+                    temp_gene_mat.iloc[:,6] = temp_gene_mat.iloc[:,6].astype(float)
+                except Exception as e:
+                    raise ValueError(str(e) + '\nPlease double check that the proper columns in the eQTL file are specified.')
                 temp_gene_mat = temp_gene_mat.drop_duplicates(subset='SNP')
                 temp_gene_mat = temp_gene_mat.sort_values('BP')
                 temp_gene_mat = temp_gene_mat.loc[temp_gene_mat['SNP'].isin(snps['SNP']),:]
