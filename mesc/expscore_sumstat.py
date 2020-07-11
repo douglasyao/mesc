@@ -163,6 +163,7 @@ def get_expression_scores(args):
 
     if args.gene_sets is not None:
         gsets = read_gene_sets(args.gene_sets)
+        print('{} gene sets read from {}'.format(len(gsets), args.gene_sets))
 
     keep_snps = pd.read_csv(args.keep, header=None)
 
@@ -249,13 +250,18 @@ def get_expression_scores(args):
                     # create dict indicating membership of each gene in each gene set
                     gene_gset_dict = defaultdict(list)
                     gene_bins = pd.qcut(np.array(eqtl_herits), args.num_bins, labels=range(1, args.num_bins + 1)).astype(int)
+                    all_gset_gene_bins = pd.qcut(np.array(eqtl_herits), args.num_gene_bins, labels=range(1, args.num_gene_bins + 1)).astype(int)
                     for ix, gene in enumerate(genes):
                         gene_gset_dict[gene].append('Cis_herit_bin_{}'.format(gene_bins[ix]))
                     for k, v in gsets.items():
+                        print('Computing expression scores for gene set: {}'.format(k))
                         v = [x for x in v if x in genes]
                         if len(v) > 0:
                             gene_indices = np.where(np.isin(genes, v))[0]
-                            gset_gene_bins = pd.qcut(np.array(eqtl_herits)[gene_indices], args.num_gene_bins, labels=range(1, args.num_gene_bins + 1)).astype(int)
+                            if len(v) == 1:
+                                gset_gene_bins = all_gset_gene_bins[gene_indices]
+                            else:
+                                gset_gene_bins = pd.qcut(np.array(eqtl_herits)[gene_indices], args.num_gene_bins, labels=range(1, args.num_gene_bins + 1)).astype(int)
                             for ix, gene in enumerate(v):
                                 gene_gset_dict[gene].append('{}_Cis_herit_bin_{}'.format(k, gset_gene_bins[ix]))
 
