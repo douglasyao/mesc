@@ -98,6 +98,7 @@ def estimate_expression_cis_herit(ref_ld, frq, zscores, ref_ld_indices):
     '''
     Estimate h2cis using LD score regression
     '''
+
     n_snp = len(zscores)
     s = lambda x: np.array(x).reshape((n_snp, 1))
 
@@ -119,7 +120,7 @@ def estimate_expression_cis_herit(ref_ld, frq, zscores, ref_ld_indices):
         end_snp = zscores['SNP'].values[i]
     temp_end_snp_idx = frq[end_snp]
 
-    M_annot = np.array(temp_end_snp_idx - temp_start_snp_idx).reshape((1, 1))
+    M_annot = np.array(temp_end_snp_idx - temp_start_snp_idx + 1).reshape((1, 1))
 
     if np.array_equal(ref_ld.iloc[start_snp_idx:end_snp_idx+1, 1].values, zscores['SNP'].values):
         temp_ref_ld = ref_ld.iloc[start_snp_idx:end_snp_idx+1, :]
@@ -223,6 +224,8 @@ def get_expression_scores(args):
 
                 if len(temp_gene_mat) <= 10:
                     print('<= 10 SNPs around gene; skipping')
+                elif np.sum(temp_gene_mat['SNP'].isin(frq)) == 0:
+                    print('No SNPs match reference list; skipping')
                 else:
                     herit = estimate_expression_cis_herit(ref_ld, frq, temp_gene_mat, ref_ld_indices)
                     temp_gene_mat['EFF'] = temp_gene_mat['Z'].values**2 / temp_gene_mat['N'].values - 1 / temp_gene_mat['N'].values
