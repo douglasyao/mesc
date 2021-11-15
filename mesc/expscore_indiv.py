@@ -84,8 +84,9 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
     FNULL = open(os.devnull, 'w')
     pheno_fname = '{}/{}.pheno'.format(args.tmp, gene_name)
     temp_geno_fname = '{}/{}'.format(args.tmp, gene_name)
+
     # making temporary phenotype file
-    temp_pheno = pd.DataFrame([sample_names, sample_names, phenos]).T
+    temp_pheno = pd.concat([sample_names, pd.Series(phenos)], axis=1, ignore_index=True)
     temp_pheno.to_csv(pheno_fname, sep='\t', index=False, header=False)
 
     # for some reason LASSO performs better when covariates are regressed out of phenotype instead of being included in regression
@@ -96,7 +97,7 @@ def get_eqtl_annot(args, gene_name, phenos, start_bp, end_bp, geno_fname, sample
         res = np.linalg.lstsq(covar.iloc[:, 2:].values, phenos_reg, rcond=None)
         phenos_reg -= np.dot(covar.iloc[:, 2:].values, res[0])
         phenos_reg = phenos_reg.tolist()
-        temp_pheno_reg = pd.DataFrame([sample_names, sample_names, phenos_reg]).T
+        temp_pheno_reg = pd.concat([sample_names, pd.Series(phenos_reg)], axis=1, ignore_index=True)
         temp_pheno_reg.to_csv(pheno_covar_fname, sep='\t', index=False, header=False)
 
     # create cis-region genotype file
@@ -206,6 +207,7 @@ def get_expression_scores(args):
     glist = []
 
     geno_fname = args.exp_bfile
+    exp_indivs = pd.read_csv(geno_fname + '.fam', header=None, delim_whitespace=True)
 
     if args.covariates:
         covar = pd.read_csv(args.covariates, delim_whitespace=True)
@@ -226,7 +228,9 @@ def get_expression_scores(args):
         for j, line in enumerate(f):
             line = line.split()
             if j == 0:
-                sample_names = line[columns[3]:]
+                sample_names = pd.DataFrame({1: line[columns[3]:]})
+                sample_names = sample_names.merge(exp_indivs.iloc[:, [0, 1]], on=1, how='left')
+                sample_names = sample_names.iloc[:,[1,0]]
                 continue
             gene = line[columns[0]]
 
