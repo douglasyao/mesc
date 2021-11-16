@@ -317,7 +317,7 @@ def get_expression_scores(args):
 
                     G = np.sum(g_annot, axis=0)
                     ave_cis_herit = []
-                    for j in range(5):
+                    for j in range(args.num_bins):
                         temp_herits = np.array(eqtl_herits)[np.where(gene_bins == j)[0]]
                         ave_cis_herit.append(np.median(temp_herits))
 
