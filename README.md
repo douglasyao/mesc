@@ -12,4 +12,10 @@ git clone https://github.com/douglasyao/mesc.git
 cd mesc
 ```
 
-See the [wiki](https://github.com/douglasyao/mesc/wiki) page for documentation. For comments and questions, please contact douglasyao@g.harvard.edu.
+Next, activate the conda environment:
+```
+conda env create --file environment.yml
+conda activate mesc
+```
+
+MESC is now ready to use. See the [wiki](https://github.com/douglasyao/mesc/wiki) page for further documentation. For comments and questions, please contact douglasyao@g.harvard.edu.
