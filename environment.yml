@@ -1,0 +1,11 @@
+name: mesc
+channels:
+- bioconda
+dependencies:
+- python=2.7
+- bitarray=0.8
+- pip 
+- pip: 
+  - scipy==1.2.3
+  - pandas==0.24.2
+  - numpy==1.16.6
