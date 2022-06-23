@@ -146,7 +146,7 @@ def read_gene_sets(fname):
     with open(fname, 'rb') as f:
         for line in f:
             line = line.strip().split()
-            gsets[line[0]] = line[1:]
+            gsets[line[0]] = list(set(line[1:]))
     return gsets
 
 def get_expression_scores(args):
@@ -354,10 +354,13 @@ def get_expression_scores(args):
                 print('Analyzing chromosome {}'.format(prev_chr))
                 chrom_gene_num = 0
                 ref_ld = read_ldscore(args, prev_chr)
-                snps = get_snp_list(cismat, ref_ld['SNP'], prev_chr)
+                snps = get_snp_list(cismat, ref_ld['SNP'], prev_chr, columns)
+                snp_indices = dict(zip(snps['SNP'].tolist(), range(len(snps))))
                 ref_ld = ref_ld[ref_ld['SNP'].isin(snps['SNP'])]
+                ref_ld_indices = dict(zip(ref_ld['SNP'].tolist(), range(len(ref_ld))))
                 frq = pd.read_table(sub_chr(args.frqfile_chr, prev_chr) + '.frq', delim_whitespace=True)
                 frq = frq[frq['MAF'] > 0.05]
+                frq = dict(zip(frq['SNP'].tolist(), range(len(frq))))
                 all_summ = []
                 all_herit = []
 
