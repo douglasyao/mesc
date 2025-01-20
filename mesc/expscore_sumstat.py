@@ -92,6 +92,7 @@ def read_ldscore(args, chr):
     geno_name = sub_chr(args.ref_ld_chr, chr) + '.l2.ldscore'
     s, comp = ps.which_compression(geno_name)
     ref_ld = pd.read_csv(geno_name + s, sep='\t', compression=comp)
+    print "Reading ldscore from  [" + geno_name + "]"
     return ref_ld
 
 def estimate_expression_cis_herit(ref_ld, frq, zscores, ref_ld_indices):
@@ -186,6 +187,7 @@ def get_expression_scores(args):
                 ref_ld = ref_ld[ref_ld['SNP'].isin(snps['SNP'])]
                 ref_ld_indices = dict(zip(ref_ld['SNP'].tolist(), range(len(ref_ld))))
                 frq = pd.read_csv(sub_chr(args.frqfile_chr, prev_chr) + '.frq', delim_whitespace=True)
+                print "Reading allele frequency from [" + sub_chr(args.frqfile_chr, prev_chr) + '.frq' + "]"
                 frq = frq[frq['MAF'] > 0.05]
                 frq = dict(zip(frq['SNP'].tolist(), range(len(frq))))
                 all_summ = []
@@ -300,6 +302,9 @@ def get_expression_scores(args):
                     eqtl_herits = [x[1] for x in all_summ]
                     g_annot = np.zeros((len(all_summ), args.num_bins), dtype=int)
                     eqtl_annot = np.zeros((len(snps), args.num_bins))
+                    if eqtl_herits.__len__() < args.num_bins:
+                        print "Error: The number of genes is {} less than predefined cis-hertability bins({}). Please check your dataset or reset b by flag --num-bins numBinValue.".format(eqtl_herits.__len__(),args.num_bins)
+                        sys.exit()
                     gene_bins = pd.qcut(np.array(eqtl_herits), args.num_bins, labels=range(args.num_bins)).astype(int)
                     gset_names = ['Cis_herit_bin_{}'.format(x) for x in range(1, args.num_bins+1)]
                     for j in range(0, len(all_summ)):
