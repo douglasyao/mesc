@@ -20,3 +20,7 @@ conda activate mesc
 ```
 
 MESC is now ready to use. See the [wiki](https://github.com/douglasyao/mesc/wiki) page for further documentation. For comments and questions, please contact douglasyao@g.harvard.edu.
+
+NOTE: This repository is no longer actively maintained.
+I’m not able to provide updates or bug fixes at this time, but you’re welcome to fork the code and modify it for your own use.
+Thanks for your understanding!
